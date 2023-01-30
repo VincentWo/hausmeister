@@ -2,7 +2,7 @@
 	import { PUBLIC_API_URL } from '$env/static/public';
 	import { goto } from '$app/navigation';
 	import { AppRail, AppRailTile, AppShell } from '@skeletonlabs/skeleton';
-	import { sessionId } from '../../stores';
+	import { sessionId } from '$lib/stores';
 	import { browser } from '$app/environment';
 	import md5 from 'md5';
 	import { writable } from 'svelte/store';

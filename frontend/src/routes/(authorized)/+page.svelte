@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { RotateCwIcon, SaveIcon } from 'svelte-feather-icons';
-	import { user, sessionId } from '../../stores';
+	import { user, sessionId } from '$lib/stores';
 	import axios from 'axios';
 	import type { Unsubscriber } from 'svelte/store';
 	import SyncedInput from '../../components/SyncedInput.svelte';
