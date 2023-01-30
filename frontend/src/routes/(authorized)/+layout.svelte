@@ -1,4 +1,5 @@
 <script language="ts">
+	import { PUBLIC_API_URL } from '$env/static/public';
 	import { goto } from '$app/navigation';
 	import { AppRail, AppRailTile, AppShell } from '@skeletonlabs/skeleton';
 	import { sessionId } from '../../stores';
@@ -19,7 +20,7 @@
 	export const selected = writable('profile');
 
 	$: if ($selected === 'logout') {
-		axios.post('http://localhost:3779/logout', undefined, {
+		axios.post(PUBLIC_API_URL + '/logout', undefined, {
 			headers: {
 				Authorization: `Bearer ${$sessionId}`
 			}
