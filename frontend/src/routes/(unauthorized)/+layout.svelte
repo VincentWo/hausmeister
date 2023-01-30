@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
-	import { sessionId } from '../../stores';
+	import { sessionId } from '$lib/stores';
 
 	$: if ($sessionId !== null) {
 		if (browser) {

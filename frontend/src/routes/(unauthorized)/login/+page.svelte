@@ -1,7 +1,7 @@
 <script lang="ts">
 	import axios from 'axios';
 	import { goto } from '$app/navigation';
-	import { sessionId, user } from '../../../stores';
+	import { sessionId, user } from '$lib/stores';
 	import { EyeIcon, EyeOffIcon } from 'svelte-feather-icons';
 	import { PUBLIC_API_URL } from '$env/static/public';
 
