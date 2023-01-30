@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { sessionId, user } from '../../../stores';
 	import { EyeIcon, EyeOffIcon } from 'svelte-feather-icons';
+	import { PUBLIC_API_URL } from '$env/static/public';
 
 	export let email = '';
 	export let password = '';
@@ -15,7 +16,7 @@
 	};
 	export async function login() {
 		axios
-			.post('http://localhost:3779/login', {
+			.post(PUBLIC_API_URL + '/login', {
 				email,
 				password
 			})

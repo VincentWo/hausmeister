@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { PUBLIC_API_URL } from '$env/static/public';
 	import axios from 'axios';
 
 	export let email = '';
@@ -7,7 +8,7 @@
 
 	export let requestReset = () => {
 		axios
-			.post('http://localhost:3779/request-reset', {
+			.post(PUBLIC_API_URL + '/request-reset', {
 				email
 			})
 			.then(() => {

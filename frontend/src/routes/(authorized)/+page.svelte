@@ -4,6 +4,7 @@
 	import axios from 'axios';
 	import type { Unsubscriber } from 'svelte/store';
 	import SyncedInput from '../../components/SyncedInput.svelte';
+	import { PUBLIC_API_URL } from '$env/static/public';
 
 	let name = '';
 	let email = '';
@@ -27,7 +28,7 @@
 	function updateName() {
 		axios
 			.patch(
-				'http://localhost:3779/user',
+				PUBLIC_API_URL + '/user',
 				{
 					name
 				},
@@ -41,7 +42,7 @@
 	}
 
 	function resetName() {
-		name = $user?.name ?? ""
+		name = $user?.name ?? '';
 	}
 
 	$: console.log($user);
@@ -79,6 +80,6 @@
 	</label>
 	<label class="input-label">
 		<span> E-mail </span>
-		<SyncedInput value={$user?.email ?? ""}/>
+		<SyncedInput value={$user?.email ?? ''} />
 	</label>
 </main>

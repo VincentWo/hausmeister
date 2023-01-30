@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { PUBLIC_API_URL } from '$env/static/public';
 	import { ProgressRadial } from '@skeletonlabs/skeleton';
 	import axios from 'axios';
 
@@ -27,7 +28,7 @@
 	$: inputDisabled = currentState !== State.AcceptingInput;
 
 	export const tokenCheck = axios
-		.post('http://localhost:3779/test_reset_token', {
+		.post(PUBLIC_API_URL + '/test_reset_token', {
 			reset_token: token
 		})
 		.then((result) => result.data)
@@ -46,7 +47,7 @@
 
 	export const resetPassword = () => {
 		axios
-			.post('http://localhost:3779/reset', {
+			.post(PUBLIC_API_URL + '/reset', {
 				reset_token: token,
 				new_password: password
 			})
