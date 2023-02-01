@@ -1,53 +1,33 @@
 <script lang="ts">
-	import { PUBLIC_API_URL } from '$env/static/public';
-	import axios from 'axios';
+	import { enhance } from '$app/forms';
+	import type { ActionData } from './$types';
 
-	export let email = '';
-	export let msg = '';
-	export let status = '';
-
-	export let requestReset = () => {
-		axios
-			.post(PUBLIC_API_URL + '/request-reset', {
-				email
-			})
-			.then(() => {
-				msg = 'E-mail has been sent, also check your spam.';
-				status = 'success';
-			})
-			.catch((e) => {
-				if (e.response) {
-					if (e.response.status === 404) {
-						msg = 'User does not exist';
-						status = 'error';
-					}
-				}
-			});
-	};
+	export let form: ActionData;
 </script>
 
 <form
-	on:submit={requestReset}
+	method="POST"
+	use:enhance
 	class="container mx-auto flex flex-col justify-center align-center max-w-lg max-h-auto p-10 rounded-container-token shadow-lg"
 >
 	<h1 class="text-center">Request password reset</h1>
-	{#if msg !== ''}
+	{#if form?.message}
 		<aside
 			class="alert"
-			class:variant-ghost-error={status === 'error'}
-			class:variant-ghost-success={status === 'success'}
+			class:variant-ghost-error={form.status === 404}
+			class:variant-ghost-success={form.status === 200}
 		>
 			<p class="alert-message">
-				{msg}
+				{form.message}
 			</p>
 		</aside>
 	{/if}
-	<label for="mail-input" class="input-label">
+	<label class="input-label">
 		<span>E-mail:</span>
-		<input type="email" id="mail-input" required bind:value={email} />
+		<input type="email" required name="email" value={form?.email ? form.email : ''} />
 	</label>
 	<input
-		value="Request reset e-mail"
+		value="Request reset"
 		type="submit"
 		id="submit-input"
 		class="btn variant-filled-primary variant-lg mx-auto mt-8"

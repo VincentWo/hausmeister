@@ -1,32 +1,16 @@
-<script language="ts">
-	import { PUBLIC_API_URL } from '$env/static/public';
-	import { goto } from '$app/navigation';
+<script lang="ts">
+	import { enhance } from '$app/forms';
 	import { AppRail, AppRailTile, AppShell } from '@skeletonlabs/skeleton';
-	import { sessionId } from '$lib/stores';
-	import { browser } from '$app/environment';
 	import md5 from 'md5';
 	import { writable } from 'svelte/store';
-	import axios from 'axios';
+	import type { LayoutData } from './$types';
 
-	const hash = md5('vincent@woltmann.art');
-	export const profile_picture = `https://gravatar.com/avatar/${hash}?s=50`;
+	export let data: LayoutData;
 
-	$: if ($sessionId === null) {
-		if (browser) {
-			goto('login');
-		}
-	}
+	const hash = encodeURIComponent(md5(data.user.email));
+	const profile_picture = `https://gravatar.com/avatar/${hash}?d=robohash&s=50`;
 
 	export const selected = writable('profile');
-
-	$: if ($selected === 'logout') {
-		axios.post(PUBLIC_API_URL + '/logout', undefined, {
-			headers: {
-				Authorization: `Bearer ${$sessionId}`
-			}
-		});
-		$sessionId = null;
-	}
 </script>
 
 <AppShell>
@@ -51,7 +35,9 @@
 				</AppRailTile>
 			</svelte:fragment>
 			<svelte:fragment slot="trail">
-				<AppRailTile label="Logout" title="Logout" value="logout" />
+				<form action="/logout" method="POST" use:enhance>
+					<AppRailTile label="Logout" title="Logout" value="logout" tag="button" />
+				</form>
 			</svelte:fragment>
 		</AppRail>
 	</svelte:fragment>
