@@ -65,7 +65,7 @@
 					type="reset"
 					class:variant-filled-primary={newName !== name}
 					disabled={newName === name}
-					on:click={() => {
+					on:click|preventDefault={() => {
 						newName = name;
 					}}
 				>
