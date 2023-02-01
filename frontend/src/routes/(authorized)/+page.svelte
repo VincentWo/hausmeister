@@ -1,85 +1,68 @@
 <script lang="ts">
 	import { RotateCwIcon, SaveIcon } from 'svelte-feather-icons';
-	import { user, sessionId } from '$lib/stores';
-	import axios from 'axios';
-	import type { Unsubscriber } from 'svelte/store';
-	import SyncedInput from '../../components/SyncedInput.svelte';
-	import { PUBLIC_API_URL } from '$env/static/public';
+	import SyncedInput from '$lib/components/SyncedInput.svelte';
+	import { page } from '$app/stores';
+	import type { ActionData } from './$types';
+	import { enhance } from '$app/forms';
 
-	let name = '';
-	let email = '';
+	export let form: ActionData;
 
-	let unsubscribe: Unsubscriber;
-	unsubscribe = user.subscribe((newUser) => {
-		if (newUser !== null) {
-			let { name: newName, email: newEmail } = newUser;
-			if (name !== newName) {
-				name = newName;
-			}
-			if (email !== newEmail) {
-				email = newEmail;
-			}
-			if (unsubscribe) {
-				unsubscribe();
-			}
-		}
-	});
+	let name = $page.data.user.name;
+	let email = $page.data.user.email;
 
-	function updateName() {
-		axios
-			.patch(
-				PUBLIC_API_URL + '/user',
-				{
-					name
-				},
-				{
-					headers: {
-						Authorization: `Bearer ${$sessionId}`
-					}
-				}
-			)
-			.then((r) => ($user = r.data));
-	}
-
-	function resetName() {
-		name = $user?.name ?? '';
-	}
-
-	$: console.log($user);
+	let newName = name;
+	let newEmail = email;
 </script>
 
 <main class="max-w-md">
 	<h1 class="mb-5">Profile</h1>
 	<h2 class="mb-2">Personal Information</h2>
-	<label class="input-label">
-		<span> Name </span>
-		<div class="input-group input-group-divider grid-cols-[1fr_auto_auto]">
-			<input
-				class="transition-colors"
-				type="text"
-				bind:value={name}
-				class:input-warning={$user && $user?.name !== name}
-			/>
-			<button
-				class="transition-colors"
-				class:variant-filled-primary={$user && $user?.name !== name}
-				disabled={$user?.name === name}
-				on:click={updateName}
-			>
-				<SaveIcon />
-			</button>
-			<button
-				class="transition-colors"
-				class:variant-filled-primary={$user && $user?.name !== name}
-				disabled={$user?.name === name}
-				on:click={resetName}
-			>
-				<RotateCwIcon />
-			</button>
+	{#if form?.message}
+		<div
+			class={form.status == 200
+				? 'alert my-3 variant-ghost-success'
+				: 'alert my-3 variant-ghost-error'}
+		>
+			<p class="alert-message">
+				{form.message}
+			</p>
 		</div>
-	</label>
+	{/if}
+	<form action="?/editName" method="POST" use:enhance>
+		<label class="input-label">
+			<span> Name </span>
+			<div class="input-group input-group-divider grid-cols-[1fr_auto_auto]">
+				<input
+					class="transition-colors"
+					type="text"
+					name="name"
+					bind:value={newName}
+					class:input-warning={newName !== name}
+				/>
+				<button
+					class="transition-colors"
+					type="submit"
+					class:variant-filled-primary={newName !== name}
+					disabled={newName === name}
+				>
+					<SaveIcon />
+				</button>
+				<button
+					class="transition-colors"
+					type="reset"
+					class:variant-filled-primary={newName !== name}
+					disabled={newName === name}
+					on:click={() => {
+						newName = name;
+					}}
+				>
+					<RotateCwIcon />
+				</button>
+			</div>
+		</label>
+	</form>
 	<label class="input-label">
 		<span> E-mail </span>
-		<SyncedInput value={$user?.email ?? ''} />
+		<SyncedInput value={newEmail} />
 	</label>
 </main>
