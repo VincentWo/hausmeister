@@ -5,18 +5,22 @@ use argon2::{
     Argon2, PasswordHasher,
 };
 
-use color_eyre::{eyre::eyre, Report};
+use color_eyre::{
+    eyre::{eyre, Context},
+    Report,
+};
 
 use serde::{Deserialize, Serialize};
 use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
     PgPool,
 };
-use tracing::{debug, info};
+use tracing::{debug, debug_span, info, Instrument};
 use uuid::Uuid;
 
 use crate::{
     routes::login::Credentials,
+    settings::DbConfig,
     types::{EMail, Password},
 };
 
@@ -35,19 +39,20 @@ pub(crate) struct UserWithPassword {
     pub(crate) password: Password,
 }
 
-#[tracing::instrument]
-pub(crate) async fn connect() -> Result<PgPool, sqlx::Error> {
-    let connect_options = PgConnectOptions::new()
-        .host("localhost")
-        .port(5432)
-        .username("hausmeister")
-        .password("password")
-        .database("hausmeister")
+#[tracing::instrument(skip(config))]
+pub(crate) async fn connect(config: &DbConfig) -> color_eyre::Result<PgPool> {
+    let options = config
+        .url
+        .parse::<PgConnectOptions>()
+        .wrap_err("Failed parsing database URL")?
         .application_name("hausmeister");
+
     PgPoolOptions::new()
         .acquire_timeout(Duration::from_secs(10))
-        .connect_with(connect_options)
+        .connect_with(options)
+        .instrument(debug_span!("Connecting to DB"))
         .await
+        .wrap_err("Connecting to database")
 }
 #[tracing::instrument(skip(pool))]
 pub(crate) async fn count_user(pool: &PgPool) -> Result<i64, Report> {

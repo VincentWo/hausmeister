@@ -11,6 +11,7 @@ use axum::{
     Extension, Router, Server, ServiceExt,
 };
 
+use settings::{read_config, Config};
 use tower::ServiceBuilder;
 use tower_http::{
     cors::CorsLayer,
@@ -18,7 +19,7 @@ use tower_http::{
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
     ServiceBuilderExt,
 };
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::{
     database::create_admin_if_no_user_exist,
@@ -37,6 +38,7 @@ mod error_handling;
 mod middlewares;
 mod request_id;
 mod routes;
+mod settings;
 mod trace;
 mod types;
 
@@ -44,18 +46,23 @@ use routes::login::login;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
+    dotenv::dotenv()?;
+
     color_eyre::install()?;
     trace::setup()?;
-    run_server().await?;
+
+    let config = read_config()?;
+
+    run_server(config).await?;
     trace::teardown();
     Ok(())
 }
 
-async fn run_server() -> Result<(), Box<dyn Error>> {
+async fn run_server(config: Config) -> Result<(), Box<dyn Error>> {
     let addr: SocketAddr = "0.0.0.0:3779".parse()?;
     info!("Listening on http://{}", addr);
 
-    let pool = database::connect().await?;
+    let pool = database::connect(&config.database).await?;
 
     tokio::spawn({
         let pool = pool.clone();
