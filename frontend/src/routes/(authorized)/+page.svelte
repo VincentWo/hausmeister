@@ -1,17 +1,18 @@
 <script lang="ts">
 	import { RotateCwIcon, SaveIcon } from 'svelte-feather-icons';
 	import SyncedInput from '$lib/components/SyncedInput.svelte';
+	import type { ActionData, PageData } from './$types';
+	import { enhance, applyAction } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
-	import type { ActionData } from './$types';
-	import { enhance } from '$app/forms';
 
 	export let form: ActionData;
 
-	let name = $page.data.user.name;
-	let email = $page.data.user.email;
+	$: name = $page.data.user.name;
+	$: email = $page.data.user.email;
 
-	let newName = name;
-	let newEmail = email;
+	$: newName = name;
+	$: newEmail = email;
 </script>
 
 <main class="max-w-md">
@@ -28,7 +29,19 @@
 			</p>
 		</div>
 	{/if}
-	<form action="?/editName" method="POST" use:enhance>
+	<form
+		action="?/editName"
+		method="POST"
+		use:enhance={() => {
+			// prevent default callback from resetting the form
+			return async ({ result }) => {
+				if (result.type === 'success') {
+					await invalidateAll();
+				}
+				await applyAction(result);
+			};
+		}}
+	>
 		<label class="input-label">
 			<span> Name </span>
 			<div class="input-group input-group-divider grid-cols-[1fr_auto_auto]">
