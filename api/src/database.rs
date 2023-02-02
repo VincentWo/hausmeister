@@ -10,6 +10,7 @@ use color_eyre::{
     Report,
 };
 
+use redis::{aio::Connection, AsyncCommands};
 use serde::{Deserialize, Serialize};
 use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
@@ -227,11 +228,16 @@ pub(crate) async fn reset_token_is_valid(
     .is_some())
 }
 
-#[tracing::instrument(skip(pool))]
-pub(crate) async fn remove_session(pool: &PgPool, id: &Uuid) -> Result<(), Report> {
+#[tracing::instrument(skip(pool, redis_connection))]
+pub(crate) async fn remove_session(
+    pool: &PgPool,
+    redis_connection: &mut Connection,
+    id: &Uuid,
+) -> Result<(), Report> {
     sqlx::query!("DELETE FROM sessions WHERE id = $1", id)
         .execute(pool)
         .await?;
+    redis_connection.del::<_, ()>(id.to_string()).await?;
 
     Ok(())
 }

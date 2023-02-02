@@ -1,10 +1,14 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use axum::{
     extract::FromRequestParts,
     http::{header::AUTHORIZATION, request::Parts, StatusCode},
 };
 
+use redis::AsyncCommands;
 use tower::{Layer, Service};
+use tracing::debug;
 use uuid::Uuid;
 
 pub(crate) struct SessionLayer;
@@ -36,15 +40,38 @@ where
             .as_bytes()
             .strip_prefix(b"Bearer ")
             .ok_or(StatusCode::BAD_REQUEST)?;
-        let pool = parts.extensions.get::<sqlx::PgPool>().unwrap();
-        let uuid = Uuid::try_parse_ascii(&uuid).map_err(|_| StatusCode::BAD_REQUEST)?;
 
-        match sqlx::query!("SELECT * FROM sessions WHERE id = $1", uuid)
+        let session_id = Uuid::try_parse_ascii(&uuid).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+        let redis_client = parts.extensions.get::<Arc<redis::Client>>().unwrap();
+        let mut redis_connection = redis_client.get_async_connection().await.unwrap();
+
+        if let Ok(user_uuid) = redis_connection
+            .get::<_, String>(session_id.to_string())
+            .await
+        {
+            if let Ok(_) = Uuid::try_parse(&user_uuid) {
+                debug!("Restored session {} from cache", session_id);
+                return Ok(AuthenticatedSession(session_id));
+            }
+        }
+
+        let pool = parts.extensions.get::<sqlx::PgPool>().unwrap();
+
+        match sqlx::query!("SELECT * FROM sessions WHERE id = $1", session_id)
             .fetch_optional(pool)
             .await
             .unwrap()
         {
-            Some(_) => Ok(AuthenticatedSession(uuid)),
+            Some(record) => {
+                let user_uuid = record.user_id;
+                debug!("Caching session {}", session_id);
+                redis_connection
+                    .set::<_, _, ()>(session_id.to_string(), user_uuid.to_string())
+                    .await
+                    .unwrap();
+                Ok(AuthenticatedSession(session_id))
+            }
             None => Err(StatusCode::FORBIDDEN),
         }
     }

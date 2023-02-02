@@ -1,6 +1,6 @@
 // in `src/main.rs`
 
-use std::{error::Error, net::SocketAddr};
+use std::{error::Error, net::SocketAddr, sync::Arc};
 
 use axum::{
     http::{
@@ -19,7 +19,7 @@ use tower_http::{
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
     ServiceBuilderExt,
 };
-use tracing::{debug, info};
+use tracing::info;
 
 use crate::{
     database::create_admin_if_no_user_exist,
@@ -59,10 +59,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn run_server(config: Config) -> Result<(), Box<dyn Error>> {
-    let addr: SocketAddr = "0.0.0.0:3779".parse()?;
+    let addr: SocketAddr = "[::1]:3779".parse()?;
     info!("Listening on http://{}", addr);
 
     let pool = database::connect(&config.database).await?;
+
+    let redis_client = redis::Client::open("redis://localhost")?;
 
     tokio::spawn({
         let pool = pool.clone();
@@ -110,6 +112,7 @@ async fn run_server(config: Config) -> Result<(), Box<dyn Error>> {
                 .allow_credentials(true),
         )
         .layer(Extension(pool))
+        .layer(Extension(Arc::new(redis_client)))
         .layer(SessionLayer)
         .service(app);
 

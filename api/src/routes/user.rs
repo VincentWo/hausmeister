@@ -1,5 +1,4 @@
 use axum::{Extension, Json};
-use serde::Deserialize;
 use sqlx::PgPool;
 
 use crate::{

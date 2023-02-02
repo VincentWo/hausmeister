@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use argon2::{password_hash, Argon2, PasswordHash, PasswordVerifier};
 use axum::{response::IntoResponse, Extension, Json};
 use axum_extra::extract::CookieJar;
+use color_eyre::eyre::Context;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -35,12 +38,17 @@ pub(crate) async fn test_login(_: AuthenticatedSession) {
     ()
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(pool, redis_client))]
 pub(crate) async fn logout(
     Extension(pool): Extension<PgPool>,
+    Extension(redis_client): Extension<Arc<redis::Client>>,
     AuthenticatedSession(session_id): AuthenticatedSession,
 ) -> Result<(), ApiError> {
-    remove_session(&pool, &session_id).await?;
+    let mut redis_connection = redis_client
+        .get_async_connection()
+        .await
+        .wrap_err(format!("Redis error"))?;
+    remove_session(&pool, &mut redis_connection, &session_id).await?;
 
     Ok(())
 }
