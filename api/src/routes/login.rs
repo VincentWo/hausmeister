@@ -34,9 +34,7 @@ struct LoginResponse {
 }
 
 #[tracing::instrument]
-pub(crate) async fn test_login(_: AuthenticatedSession) {
-    ()
-}
+pub(crate) async fn test_login(_: AuthenticatedSession) {}
 
 #[tracing::instrument(skip(pool, redis_client))]
 pub(crate) async fn logout(
@@ -47,7 +45,7 @@ pub(crate) async fn logout(
     let mut redis_connection = redis_client
         .get_async_connection()
         .await
-        .wrap_err(format!("Redis error"))?;
+        .wrap_err("Redis error")?;
     remove_session(&pool, &mut redis_connection, &session_id).await?;
 
     Ok(())
@@ -70,9 +68,9 @@ pub(crate) async fn login(
 
     Argon2::default()
         .verify_password(credentials.password.0.as_bytes(), &parsed_hash)
-        .or_else(|e| match e {
-            password_hash::Error::Password => Err(ApiError::WrongCredentials),
-            e => Err(ApiError::UnknownError(e.into())),
+        .map_err(|e| match e {
+            password_hash::Error::Password => ApiError::WrongCredentials,
+            e => ApiError::UnknownError(e.into()),
         })?;
 
     // The password is verified, otherwise verify_password would have returned an Err

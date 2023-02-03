@@ -35,7 +35,7 @@ impl IntoResponse for ApiError {
                 "Invalid/expired Session".to_owned(),
             ),
             ApiError::UnknownError(r) => {
-                let error = format!("{:?}", r);
+                let error = format!("{r:?}");
 
                 error!("Error: {error}");
                 return (

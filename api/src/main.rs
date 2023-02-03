@@ -1,5 +1,3 @@
-// in `src/main.rs`
-
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
 use axum::{
