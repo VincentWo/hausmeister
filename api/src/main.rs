@@ -1,4 +1,11 @@
 #![forbid(unsafe_code)]
+#![warn(
+    clippy::as_conversions,
+    clippy::case_sensitive_file_extension_comparisons,
+    clippy::cognitive_complexity,
+    clippy::unwrap_used
+)]
+#![feature(lint_reasons)]
 
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
@@ -66,21 +73,14 @@ async fn run_server(config: Config) -> Result<(), Box<dyn Error>> {
 
     let redis_client = redis::Client::open("redis://localhost")?;
 
-    tokio::spawn({
-        let pool = pool.clone();
-        async move {
-            let pool = pool;
-            create_admin_if_no_user_exist(
-                &pool,
-                &Credentials {
-                    email: EMail("admin@example.com".to_owned()),
-                    password: Password("password".to_owned()),
-                },
-            )
-            .await
-            .unwrap();
-        }
-    });
+    create_admin_if_no_user_exist(
+        &pool,
+        &Credentials {
+            email: EMail("admin@example.com".to_owned()),
+            password: Password("password".to_owned()),
+        },
+    )
+    .await?;
 
     let app = Router::new()
         .route("/", get(root))
@@ -108,7 +108,10 @@ async fn run_server(config: Config) -> Result<(), Box<dyn Error>> {
                         // We don't allow non utf-origins at the moment
                         return false;
                     };
-                    let config = request.extensions.get::<Arc<Config>>().unwrap();
+                    let config = request
+                        .extensions
+                        .get::<Arc<Config>>()
+                        .expect("Config is missing from extensions");
 
                     if config.app.allowed_origins.contains(origin) {
                         true
