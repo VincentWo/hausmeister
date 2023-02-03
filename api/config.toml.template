@@ -1,0 +1,9 @@
+[app]
+# This allows any CORS Request from any localhost origin,
+# usefull for development, default to false.
+allow_localhost = true
+
+# This sets the list of allowed CORS origins, you
+# should put the origin of your frontend(s) here
+# defaults to []
+allowed_origins = []
