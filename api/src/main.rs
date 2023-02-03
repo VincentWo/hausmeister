@@ -14,7 +14,7 @@ use axum::{
 use settings::{read_config, Config};
 use tower::ServiceBuilder;
 use tower_http::{
-    cors::CorsLayer,
+    cors::{AllowOrigin, CorsLayer},
     request_id::MakeRequestUuid,
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
     ServiceBuilderExt,
@@ -94,26 +94,38 @@ async fn run_server(config: Config) -> Result<(), Box<dyn Error>> {
         .route("/test_reset_token", post(test_reset_token));
 
     let svc = ServiceBuilder::new()
-        .set_x_request_id(MakeRequestUuid)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().include_headers(true))
                 .on_response(DefaultOnResponse::new().include_headers(true)),
         )
-        .propagate_x_request_id()
+        .layer(Extension(Arc::new(config)))
         .layer(
             CorsLayer::new()
                 .allow_methods([Method::GET, Method::POST, Method::PATCH])
-                .allow_origin([
-                    "http://localhost:5173".try_into().unwrap(),
-                    "http://localhost:3001".try_into().unwrap(),
-                ])
+                .allow_origin(AllowOrigin::predicate(|header, request| {
+                    let Ok(origin) = header.to_str() else {
+                        // We don't allow non utf-origins at the moment
+                        return false;
+                    };
+                    let config = request.extensions.get::<Arc<Config>>().unwrap();
+
+                    if config.app.allowed_origins.contains(origin) {
+                        true
+                    } else {
+                        config.app.allow_localhost
+                            && (origin.starts_with("http://localhost")
+                                || origin.starts_with("https://localhost"))
+                    }
+                }))
                 .allow_headers([CONTENT_TYPE, AUTHORIZATION])
                 .allow_credentials(true),
         )
         .layer(Extension(pool))
         .layer(Extension(Arc::new(redis_client)))
         .layer(SessionLayer)
+        .set_x_request_id(MakeRequestUuid)
+        .propagate_x_request_id()
         .service(app);
 
     Server::bind(&addr).serve(svc.into_make_service()).await?;
