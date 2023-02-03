@@ -41,7 +41,7 @@ where
             .strip_prefix(b"Bearer ")
             .ok_or(StatusCode::BAD_REQUEST)?;
 
-        let session_id = Uuid::try_parse_ascii(&uuid).map_err(|_| StatusCode::BAD_REQUEST)?;
+        let session_id = Uuid::try_parse_ascii(uuid).map_err(|_| StatusCode::BAD_REQUEST)?;
 
         let redis_client = parts.extensions.get::<Arc<redis::Client>>().unwrap();
         let mut redis_connection = redis_client.get_async_connection().await.unwrap();
@@ -50,7 +50,7 @@ where
             .get::<_, String>(session_id.to_string())
             .await
         {
-            if let Ok(_) = Uuid::try_parse(&user_uuid) {
+            if Uuid::try_parse(&user_uuid).is_ok() {
                 debug!("Restored session {} from cache", session_id);
                 return Ok(AuthenticatedSession(session_id));
             }
