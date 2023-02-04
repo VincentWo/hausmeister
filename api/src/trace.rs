@@ -1,9 +1,9 @@
-use std::error::Error;
+use color_eyre::Report;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
 use tracing_tree::HierarchicalLayer;
 
-pub(crate) fn setup() -> Result<(), Box<dyn Error>> {
+pub(crate) fn setup() -> Result<(), Report> {
     // let tracer =
     //     opentelemetry_jaeger::new_pipeline().install_batch(opentelemetry::runtime::Tokio)?;
     // let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);

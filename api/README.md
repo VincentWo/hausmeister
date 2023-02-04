@@ -2,7 +2,7 @@
 
 For development you probably just want to use the default Redis + Postgresql using:
 
-```
+```bash
 docker-compose up -d
 cp config.toml.template config.toml
 cargo run
