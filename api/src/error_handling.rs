@@ -9,18 +9,41 @@ impl From<Report> for ApiError {
     }
 }
 
+/// The type for all possible Errors that can be returned by a handler.
 pub(crate) enum ApiError {
+    /// A request contains an email or user-id, that does not map to an user
     UserNotFound,
+    /// A session id was specified that does'nt map to a session
     InvalidSession,
-    TokenNotFound,
-    WrongCredentials,
-    UnknownError(Report),
-    NotLoggedIn,
+    /// Session was specified using a invalid syntax, details
+    /// are in the inner Report.
     MisformedAuth(Report),
+    /// A specified token (i.e. for password reset) was not found
+    TokenNotFound,
+    /// The wrong password was submitted
+    WrongCredentials,
+    /// A route required authentication, but none was provided
+    NotLoggedIn,
+    /// Something unexpected happened (i.e. database connection failed)
+    UnknownError(Report),
 }
 
+/// Every [ApiError] except the `UnknownError` returns the JSON
+/// serialized version of this struct.
 #[derive(Serialize)]
 struct ErrorReturn {
+    /// A max. 2 sentence developer understandable reason for the error
+    ///
+    /// A good error message should always contain:
+    ///  - Why did the error occur: As abstract as possible, as concrete as nescessary
+    ///  - What can I do: A clear instruction how to prevent this error
+    /// The concrete reasons are *not* considered part of the stable API
+    /// and can always change, even within a patch release. At the moment every
+    /// error is differentiable by the StatusCode (this is part of the stable API)
+    ///
+    /// Does not need to be understandable by users (so can use technical terms)
+    /// but should not require knowledge about implementation details, that is
+    /// (at the moment) the job of the frontend.
     reason: String,
 }
 
