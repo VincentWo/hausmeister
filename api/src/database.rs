@@ -1,3 +1,7 @@
+//! All methods to talk to the database reside here to make
+//! any changes to tables, relations etc. easier, currently
+//! this module also does password hashing, but this should
+//! propably be moved to a different module.
 use std::time::Duration;
 
 use argon2::{
@@ -25,6 +29,9 @@ use crate::{
     types::{EMail, Password},
 };
 
+/// This directly mirrors the `users` table, expect for the password
+/// column, since we don't want to return a password on accident
+#[allow(clippy::missing_docs_in_private_items)]
 #[derive(Debug, Serialize)]
 pub(crate) struct User {
     pub(crate) id: Uuid,
@@ -32,6 +39,18 @@ pub(crate) struct User {
     pub(crate) email: EMail,
 }
 
+/// This is an subset of [User], containing all the updatable properties
+/// as [Options](::std::option), usefull for allowing partial updates.
+#[allow(clippy::missing_docs_in_private_items)]
+#[derive(Debug, Deserialize)]
+pub(crate) struct UserUpdate {
+    pub(crate) name: Option<String>,
+    pub(crate) email: Option<String>,
+}
+
+/// The same as [User], just including a password where it is
+/// required
+#[allow(clippy::missing_docs_in_private_items)]
 #[derive(Debug, Serialize)]
 pub(crate) struct UserWithPassword {
     pub(crate) id: Uuid,
@@ -40,6 +59,8 @@ pub(crate) struct UserWithPassword {
     pub(crate) password: Password,
 }
 
+/// Connects to the database given by `config`, setting the application
+/// name to "hausmeister"
 #[tracing::instrument(skip(config))]
 pub(crate) async fn connect(config: &DbConfig) -> color_eyre::Result<PgPool> {
     let options = config
@@ -55,6 +76,8 @@ pub(crate) async fn connect(config: &DbConfig) -> color_eyre::Result<PgPool> {
         .await
         .wrap_err("Connecting to database")
 }
+
+/// Returns the number of registered users
 #[tracing::instrument(skip(pool))]
 pub(crate) async fn count_user(pool: &PgPool) -> Result<i64, Report> {
     sqlx::query!("select Count(*) from users")
@@ -64,6 +87,23 @@ pub(crate) async fn count_user(pool: &PgPool) -> Result<i64, Report> {
         .ok_or_else(|| eyre!("Count was None (should not happen)"))
 }
 
+/// If no user exists, this tries to create a new admin user
+/// with the given credentials.
+///
+/// Not creating the admin is not considered a failure
+/// since it is assumed that this is only desirable on
+/// new installations.
+///
+/// # Note:
+/// This method can include a (safe) race condition if running
+/// multiple instances of hausmeister connecting to
+/// the same database and specifying different credentials,
+/// it is not specified nor predictable how many admins
+/// will be created and which ones, only that it is
+/// at least one. To prevent that make sure that
+/// the same admin + password is chosen by all instances
+/// (and this method probably needs to be removed for
+/// security reasons anyway)
 #[tracing::instrument(skip(pool))]
 pub(crate) async fn create_admin_if_no_user_exist(
     pool: &PgPool,
@@ -98,16 +138,6 @@ pub(crate) async fn create_admin_if_no_user_exist(
     }
 
     Ok(())
-}
-#[tracing::instrument(skip(_pool))]
-pub(crate) async fn list_user(_pool: &PgPool) -> Result<Vec<UserWithPassword>, Report> {
-    // let user: Vec<_> = sqlx::query!("SELECT * FROM users")
-    // .fetch(pool)
-    // .try_collect()
-    // .await?;
-
-    todo!();
-    // Ok(user)
 }
 
 #[tracing::instrument(skip(pool))]
@@ -171,9 +201,19 @@ pub(crate) async fn new_reset_request(pool: &PgPool, user_id: &Uuid) -> Result<U
     Ok(reset_id)
 }
 
+/// The known errors which can occur when calling [reset_password]
 pub(crate) enum ResetError {
+    /// The reset token does not exist so no password was reset
     TokenNotFound,
 }
+
+/// Resets the password of the user associated with the given reset token.
+///
+/// This returns a result in a result: The outer result is for any "unknown"
+/// errors and a failure here should result in an 500, the inner result is
+/// for errors that have a concrete reason and can be fixed by the caller.
+///
+/// See [ResetError] for the possible failures.
 #[tracing::instrument(skip(pool))]
 pub(crate) async fn reset_password(
     pool: &PgPool,
@@ -262,16 +302,11 @@ pub(crate) async fn get_user_from_session(
     )
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct PatchUser {
-    name: Option<String>,
-    email: Option<String>,
-}
 #[tracing::instrument(skip(pool))]
 pub(crate) async fn update_current_user(
     pool: &PgPool,
     session_id: &Uuid,
-    update: PatchUser,
+    update: UserUpdate,
 ) -> Result<Option<User>, Report> {
     let user = sqlx::query!(
         "UPDATE

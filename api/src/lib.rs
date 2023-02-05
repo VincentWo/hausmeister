@@ -68,7 +68,6 @@ use crate::{
     routes::{
         login::{logout, test_login, Credentials},
         reset::{request_reset, reset_password, test_reset_token},
-        root,
         user::{get_user, patch_user},
     },
     types::{EMail, Password},
@@ -116,7 +115,6 @@ async fn run_server(config: Config) -> Result<(), Report> {
     .await?;
 
     let app = Router::new()
-        .route("/", get(root))
         .route("/test_login", get(test_login))
         .route("/login", post(login))
         .route("/logout", post(logout))
