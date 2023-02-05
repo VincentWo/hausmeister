@@ -1,3 +1,50 @@
+//! Methods for handling, logging and returning errors
+//!
+//! This module most interesting type is [ApiError], it
+//! can be returned as an error from any route since it
+//! implements [IntoResponse](axum::response::IntoResponse).
+//!
+//! # General thoughts on error handling
+//! Error handling is hard, so much is certain. We found
+//! (hopefully) satisfying solutions for most problems,
+//! but gaps remain:
+//!
+//! ## Internal error handling
+//! For internal error handling we differentiate between
+//! "server" and "client" errors. Client-errors
+//! use enums (though we don't use something like this-error at the moment,
+//! why?) and server-errors use [color_eyre] to produce pretty back- &
+//! span-traces (usefull in async).
+//!
+//! We also don't refrain from mixing these, either with
+//! `Result<Result<_, _>, _>` or with an enum with variants containing
+//! [color_eyre::Report].
+//!
+//! We use this terminology since in the context of a web app
+//! we usually have to return something to the user and in
+//! general client-errors imply a 4XX error code and server-errors
+//! imply a 5XX error code.
+
+//! To get a better image of things, let's take a look at
+//! [reset_password](crate::database::reset_password). This function
+//! returns a `Result<Result<(), ResetError>, Report>`, where
+//! [ResetError](crate::database::ResetError) is an Client-error
+//! and thus an enum. The `Report` functions as a catch-all for
+//! anything uncontrollable going wrong, in this case this means
+//! DB Calls failing or the password hashing fails (even though
+//! it should never). This is distinctly not the fault of the
+//! client who tried to reset their password, but it's on us!
+//! So the only reasonable thing to do is returning a 500 and logging
+//! the error for developers or sysadmins, there is no need for our
+//! code to differentiate between the various reasons a DB call can fail:
+//! We can't fix them anyway (yet?).
+//!
+//! But if everything DB & password hashing wise succeeds there still
+//! might be the case that the reset token is simply invalid: This
+//! is the fault of the client and something with a clear fix on their
+//! side, thus the handler can match on this enum and return the appropriate
+//! 4XX status codes.
+
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use color_eyre::Report;
 use serde::Serialize;
