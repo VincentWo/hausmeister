@@ -6,12 +6,16 @@
 use std::sync::Arc;
 
 use axum::{Extension, Json};
+use axum_extra::extract::{
+    cookie::{Cookie, SameSite},
+    CookieJar,
+};
 use sqlx::PgPool;
 
 use crate::{
     database::{
         auth::{login_user, Credentials, LoginError, Session},
-        remove_session,
+        remove_session, User,
     },
     error_handling::ApiError,
     middlewares::session::AuthenticatedSession,
@@ -47,16 +51,29 @@ pub(crate) async fn logout(
 /// Checks whether the credentials are valid (otherwise returns either 404
 /// if the user cannot be found or 401 if the password is wrong) and if so
 /// returns the [Session] containing the session id and user object.
-#[tracing::instrument(skip(pool))]
+// #[tracing::instrument(skip(pool))]
+#[axum::debug_handler]
 pub(crate) async fn login(
     Extension(pool): Extension<PgPool>,
+    cookie_jar: CookieJar,
     Json(credentials): Json<Credentials>,
-) -> Result<Json<Session>, ApiError> {
-    match login_user(&pool, credentials).await? {
-        Ok(session) => Ok(Json(session)),
-        Err(e) => Err(match e {
-            LoginError::UserNotFound => ApiError::UserNotFound,
-            LoginError::InvalidCredentials => ApiError::WrongCredentials,
-        }),
-    }
+) -> Result<(CookieJar, Json<User>), ApiError> {
+    let session = match login_user(&pool, credentials).await? {
+        Ok(session) => session,
+        Err(e) => {
+            return Err(match e {
+                LoginError::UserNotFound => ApiError::UserNotFound,
+                LoginError::InvalidCredentials => ApiError::WrongCredentials,
+            })
+        }
+    };
+    let session_cookie = Cookie::build("id", session.session_id.to_string())
+        .secure(true)
+        .http_only(true)
+        .same_site(SameSite::Strict)
+        .finish();
+
+    let cookie_jar = cookie_jar.add(session_cookie);
+
+    Ok((cookie_jar, Json(session.user)))
 }

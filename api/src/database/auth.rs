@@ -117,9 +117,9 @@ async fn check_credentials_and_get_user(
 #[derive(Serialize, Debug)]
 pub(crate) struct Session {
     /// The session id/token
-    session_id: Uuid,
+    pub(crate) session_id: Uuid,
     /// User data at session creation
-    user: User,
+    pub(crate) user: User,
 }
 
 /// Check credentials & create session

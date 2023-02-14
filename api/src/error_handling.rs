@@ -112,7 +112,7 @@ impl IntoResponse for ApiError {
             ),
             ApiError::MisformedAuth(error) => (
                 StatusCode::BAD_REQUEST,
-                format!("The Auth header did not follow 'Bearer [session_uuid]', getting error: {error}")
+                format!("Session id in 'id' cookie wasn't valid, getting error: {error}"),
             ),
             ApiError::UnknownError(r) => {
                 let error = format!("{r:?}");

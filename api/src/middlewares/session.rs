@@ -8,6 +8,7 @@ use axum::{
     http::{header::AUTHORIZATION, request::Parts},
 };
 
+use axum_extra::extract::CookieJar;
 use color_eyre::{eyre::Context, Report};
 use redis::AsyncCommands;
 use tracing::debug;
@@ -38,20 +39,10 @@ where
     type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let auth_header = parts
-            .headers
-            .get(AUTHORIZATION)
-            .ok_or(ApiError::NotLoggedIn)?;
-        let uuid =
-            auth_header
-                .as_bytes()
-                .strip_prefix(b"Bearer ")
-                .ok_or(ApiError::MisformedAuth(Report::msg(
-                    "Missing Bearer Prefix",
-                )))?;
+        let cookies = CookieJar::from_headers(&parts.headers);
+        let uuid = cookies.get("id").ok_or(ApiError::NotLoggedIn)?.value();
 
-        let session_id =
-            Uuid::try_parse_ascii(uuid).map_err(|e| ApiError::MisformedAuth(e.into()))?;
+        let session_id = Uuid::try_parse(uuid).map_err(|e| ApiError::MisformedAuth(e.into()))?;
 
         let redis_client = parts
             .extensions
