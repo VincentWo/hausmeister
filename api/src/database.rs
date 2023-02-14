@@ -1,7 +1,11 @@
-//! All methods to talk to the database reside here to make
-//! any changes to tables, relations etc. easier, currently
-//! this module also does password hashing, but this should
-//! propably be moved to a different module.
+//! All methods to talk to the database reside here.
+//!
+//! This makes any changes to tables, relations etc. easier.
+//! Currently this module is also responsible for password hashing,
+//! but this should propably be moved to a different module.
+
+pub(crate) mod auth;
+
 use std::time::Duration;
 
 use argon2::{
@@ -24,10 +28,11 @@ use tracing::{debug, debug_span, info, Instrument};
 use uuid::Uuid;
 
 use crate::{
-    routes::login::Credentials,
     settings::DbConfig,
     types::{EMail, Password},
 };
+
+use self::auth::Credentials;
 
 /// This directly mirrors the `users` table, expect for the password
 /// column, since we don't want to return a password on accident
@@ -144,39 +149,16 @@ pub(crate) async fn create_admin_if_no_user_exist(
 pub(crate) async fn get_user_by_email(
     pool: &PgPool,
     email: &EMail,
-) -> Result<Option<UserWithPassword>, Report> {
+) -> Result<Option<User>, Report> {
     let db_user = sqlx::query!("SELECT * FROM users WHERE email=$1", email.0)
         .fetch_optional(pool)
         .await?;
 
-    Ok(db_user.map(|db_user| UserWithPassword {
+    Ok(db_user.map(|db_user| User {
         id: db_user.id,
         name: db_user.name,
-        password: Password(db_user.password),
         email: EMail(db_user.email),
     }))
-}
-
-#[tracing::instrument(skip(pool))]
-pub(crate) async fn create_new_session(pool: &PgPool, user_id: &Uuid) -> Result<Uuid, Report> {
-    let session_id = Uuid::new_v4();
-    sqlx::query!(
-        "INSERT INTO
-            sessions (id, user_id)
-        VALUES
-            ($1, $2)
-        ON CONFLICT(user_id) DO
-            UPDATE SET
-                id = EXCLUDED.id,
-                user_id = EXCLUDED.user_id,
-                created_at = EXCLUDED.created_at",
-        session_id,
-        user_id,
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(session_id)
 }
 
 #[tracing::instrument(skip(pool))]

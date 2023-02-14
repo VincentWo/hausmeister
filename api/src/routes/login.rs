@@ -1,41 +1,32 @@
+//! All login/logout etc. routes
+//!
+//! These routes are used to do everything related directly to logging in
+//! or logging out
+
 use std::sync::Arc;
 
-use argon2::{password_hash, Argon2, PasswordHash, PasswordVerifier};
-use axum::{response::IntoResponse, Extension, Json};
-use axum_extra::extract::CookieJar;
-use color_eyre::eyre::Context;
-use serde::{Deserialize, Serialize};
+use axum::{Extension, Json};
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use crate::{
-    database::{create_new_session, get_user_by_email, remove_session},
+    database::{
+        auth::{login_user, Credentials, LoginError, Session},
+        remove_session,
+    },
     error_handling::ApiError,
     middlewares::session::AuthenticatedSession,
-    types::{EMail, Password},
 };
+use color_eyre::eyre::Context;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct Credentials {
-    pub(crate) email: EMail,
-    pub(crate) password: Password,
-}
-
-#[derive(Serialize)]
-struct User {
-    email: EMail,
-    name: String,
-}
-
-#[derive(Serialize)]
-struct LoginResponse {
-    session_id: Uuid,
-    user: User,
-}
-
+/// Returns 200 if the user is logged in, 401 otherwise
+///
+/// Note that [AuthenticatedSession] does all the actual work
 #[tracing::instrument]
 pub(crate) async fn test_login(_: AuthenticatedSession) {}
 
+/// Logs the current user out
+///
+/// Deletes the session in the redis cache and postgres server.
 #[tracing::instrument(skip(pool, redis_client))]
 pub(crate) async fn logout(
     Extension(pool): Extension<PgPool>,
@@ -51,40 +42,21 @@ pub(crate) async fn logout(
     Ok(())
 }
 
+/// Tries to log the user in
+///
+/// Checks whether the credentials are valid (otherwise returns either 404
+/// if the user cannot be found or 401 if the password is wrong) and if so
+/// returns the [Session] containing the session id and user object.
 #[tracing::instrument(skip(pool))]
 pub(crate) async fn login(
     Extension(pool): Extension<PgPool>,
-    cookies: CookieJar,
     Json(credentials): Json<Credentials>,
-) -> Result<impl IntoResponse, ApiError> {
-    let user = get_user_by_email(&pool, &credentials.email).await?;
-
-    let Some(user) = user else {
-        return Err(ApiError::UserNotFound);
-    };
-
-    let parsed_hash =
-        PasswordHash::new(&user.password.0).map_err(|e| ApiError::UnknownError(e.into()))?;
-
-    Argon2::default()
-        .verify_password(credentials.password.0.as_bytes(), &parsed_hash)
-        .map_err(|e| match e {
-            password_hash::Error::Password => ApiError::WrongCredentials,
-            e => ApiError::UnknownError(e.into()),
-        })?;
-
-    // The password is verified, otherwise verify_password would have returned an Err
-
-    let session = create_new_session(&pool, &user.id).await?;
-
-    Ok((
-        cookies,
-        Json(LoginResponse {
-            session_id: session,
-            user: User {
-                email: user.email,
-                name: user.name,
-            },
+) -> Result<Json<Session>, ApiError> {
+    match login_user(&pool, credentials).await? {
+        Ok(session) => Ok(Json(session)),
+        Err(e) => Err(match e {
+            LoginError::UserNotFound => ApiError::UserNotFound,
+            LoginError::InvalidCredentials => ApiError::WrongCredentials,
         }),
-    ))
+    }
 }

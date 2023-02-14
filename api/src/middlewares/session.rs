@@ -1,3 +1,5 @@
+//! Session extraction & Routeguarding
+
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -8,24 +10,25 @@ use axum::{
 
 use color_eyre::{eyre::Context, Report};
 use redis::AsyncCommands;
-use tower::{Layer, Service};
 use tracing::debug;
 use uuid::Uuid;
 
 use crate::error_handling::ApiError;
 
-pub(crate) struct SessionLayer;
-
-impl<S> Layer<S> for SessionLayer {
-    type Service = Session<S>;
-
-    fn layer(&self, inner: S) -> Self::Service {
-        Session { inner }
-    }
-}
-
+/// Extractor requiring the client to be logged in.
+///
+/// This extracts the session id, **not** the user id!
+/// (Probably a good idea to somehow type this better)
+/// Currently to get any info about the user we need to
+/// call [get_user_from_session](crate::database::get_user_from_session)
+/// - note that this allows a race condition if the session get's deleted
+/// between the two calls - so probably something we should fix on the
+/// side of the middleware
 #[derive(Clone, Debug)]
-pub(crate) struct AuthenticatedSession(pub(crate) Uuid);
+pub(crate) struct AuthenticatedSession(
+    /// The session id
+    pub(crate) Uuid,
+);
 
 #[async_trait]
 impl<S> FromRequestParts<S> for AuthenticatedSession
@@ -90,30 +93,5 @@ where
             }
             None => Err(ApiError::NotLoggedIn),
         }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct Session<S> {
-    inner: S,
-}
-
-impl<S, Request> Service<Request> for Session<S>
-where
-    S: Service<Request>,
-{
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future = S::Future;
-
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, req: Request) -> Self::Future {
-        self.inner.call(req)
     }
 }
