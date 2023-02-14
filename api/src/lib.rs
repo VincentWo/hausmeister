@@ -2,7 +2,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![warn(
     missing_docs,
-    rustdoc::missing_doc_code_examples,
     clippy::missing_docs_in_private_items,
     clippy::as_conversions,
     clippy::case_sensitive_file_extension_comparisons,
@@ -63,10 +62,9 @@ use tower_http::{
 use tracing::info;
 
 use crate::{
-    database::create_admin_if_no_user_exist,
-    middlewares::session::SessionLayer,
+    database::{auth::Credentials, create_admin_if_no_user_exist},
     routes::{
-        login::{logout, test_login, Credentials},
+        login::{logout, test_login},
         reset::{request_reset, reset_password, test_reset_token},
         user::{get_user, patch_user},
     },
@@ -76,7 +74,6 @@ use crate::{
 mod database;
 mod error_handling;
 mod middlewares;
-mod request_id;
 mod routes;
 mod settings;
 mod trace;
@@ -84,6 +81,10 @@ mod types;
 
 use routes::login::login;
 
+/// Run the complete application
+///
+/// Only public function at the moment - should be changed to accept the
+/// settings to move setting loading into the application
 pub async fn run() -> Result<(), Report> {
     dotenv::dotenv()?;
 
@@ -93,10 +94,11 @@ pub async fn run() -> Result<(), Report> {
     let config = read_config()?;
 
     run_server(config).await?;
-    trace::teardown();
+
     Ok(())
 }
 
+/// Start the server with the given configuration
 async fn run_server(config: Config) -> Result<(), Report> {
     let addr: SocketAddr = "[::1]:3779".parse()?;
     info!("Listening on http://{}", addr);
@@ -157,7 +159,6 @@ async fn run_server(config: Config) -> Result<(), Report> {
         )
         .layer(Extension(pool))
         .layer(Extension(Arc::new(redis_client)))
-        .layer(SessionLayer)
         .set_x_request_id(MakeRequestUuid)
         .propagate_x_request_id()
         .service(app);

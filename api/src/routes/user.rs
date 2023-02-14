@@ -1,3 +1,5 @@
+//! Routes modifying or requesting user data
+
 use axum::{Extension, Json};
 use sqlx::PgPool;
 

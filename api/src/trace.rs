@@ -1,12 +1,18 @@
+//! Tracing registration
+
 use color_eyre::Report;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry};
 use tracing_tree::HierarchicalLayer;
 
+/// Sets alle tracing subscriber up
+///
+/// At the moment this just registers the infrastructure for
+/// span traces, env filters and pretty printing
+///
+/// The plan is to include opentelemetry support later on and
+/// more config options
 pub(crate) fn setup() -> Result<(), Report> {
-    // let tracer =
-    //     opentelemetry_jaeger::new_pipeline().install_batch(opentelemetry::runtime::Tokio)?;
-    // let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
     Registry::default()
         .with(EnvFilter::from_default_env())
         .with(
@@ -15,12 +21,7 @@ pub(crate) fn setup() -> Result<(), Report> {
                 .with_bracketed_fields(true),
         )
         .with(ErrorLayer::default())
-        // .with(telemetry)
         .init();
 
     Ok(())
-}
-
-pub(crate) fn teardown() {
-    // opentelemetry::global::shutdown_tracer_provider();
 }
