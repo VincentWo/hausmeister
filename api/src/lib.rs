@@ -60,6 +60,7 @@ use tower_http::{
     ServiceBuilderExt,
 };
 use tracing::info;
+use webauthn_rs::prelude::Url;
 
 use crate::{
     database::{auth::Credentials, create_admin_if_no_user_exist},
@@ -67,17 +68,20 @@ use crate::{
         login::{logout, test_login},
         reset::{request_reset, reset_password, test_reset_token},
         user::{get_user, patch_user},
+        webauthn::start_register,
     },
     types::{EMail, Password},
 };
 
 mod database;
 mod error_handling;
+mod extractors;
 mod middlewares;
 mod routes;
 mod settings;
 mod trace;
 mod types;
+mod webauthn;
 
 use routes::login::login;
 
@@ -104,6 +108,7 @@ async fn run_server(config: Config) -> Result<(), Report> {
     info!("Listening on http://{}", addr);
 
     let pool = database::connect(&config.database).await?;
+    let webauthn = webauthn::setup(&config.app)?;
 
     let redis_client = redis::Client::open("redis://localhost")?;
 
@@ -124,7 +129,8 @@ async fn run_server(config: Config) -> Result<(), Report> {
         .route("/reset", post(reset_password))
         .route("/user", get(get_user))
         .route("/user", patch(patch_user))
-        .route("/test_reset_token", post(test_reset_token));
+        .route("/test_reset_token", post(test_reset_token))
+        .route("/webauthn/start_register", post(start_register));
 
     let svc = ServiceBuilder::new()
         .layer(
@@ -141,23 +147,29 @@ async fn run_server(config: Config) -> Result<(), Report> {
                         // We don't allow non utf-origins at the moment
                         return false;
                     };
+                    let Ok(origin) = Url::parse(origin) else {
+                        return false;
+                    };
                     let config = request
                         .extensions
                         .get::<Arc<Config>>()
                         .expect("Config is missing from extensions");
 
-                    if config.app.allowed_origins.contains(origin) {
+                    if config.app.allowed_origins.contains(&origin) {
                         true
                     } else {
-                        config.app.allow_localhost
-                            && (origin.starts_with("http://localhost")
-                                || origin.starts_with("https://localhost"))
+                        config.app.allow_localhost && origin.host_str() == Some("localhost")
                     }
                 }))
-                .allow_headers([CONTENT_TYPE, AUTHORIZATION])
+                .allow_headers([
+                    CONTENT_TYPE,
+                    AUTHORIZATION,
+                    "x-sveltekit-action".try_into().unwrap(),
+                ])
                 .allow_credentials(true),
         )
         .layer(Extension(pool))
+        .layer(Extension(Arc::new(webauthn)))
         .layer(Extension(Arc::new(redis_client)))
         .set_x_request_id(MakeRequestUuid)
         .propagate_x_request_id()

@@ -26,6 +26,7 @@ use sqlx::{
 };
 use tracing::{debug, debug_span, info, Instrument};
 use uuid::Uuid;
+use webauthn_rs::prelude::PasskeyRegistration;
 
 use crate::{
     settings::DbConfig,
@@ -315,4 +316,20 @@ pub(crate) async fn update_current_user(
     });
 
     Ok(user)
+}
+
+#[tracing::instrument]
+pub(crate) async fn set_webauthn_registration(
+    pool: &PgPool,
+    session_id: &Uuid,
+    registration: PasskeyRegistration,
+) -> Result<(), Report> {
+    sqlx::query!(
+        "UPDATE sessions
+         SET webauthn_registration = $1
+         WHERE id = $2",
+        sqlx::types::Json(registration) as _,
+        session_id,
+    ).execute(pool).await?;
+    Ok(())
 }

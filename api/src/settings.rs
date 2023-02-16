@@ -3,6 +3,7 @@ use std::collections::HashSet;
 
 use config::{Environment, File};
 use serde::Deserialize;
+use webauthn_rs::prelude::Url;
 
 /// Config for PostgreSQL Connection
 #[derive(Debug, Deserialize)]
@@ -18,7 +19,7 @@ pub(crate) struct AppConfig {
     /// is supposed to run on - does not support any kind of regex at
     /// the moment
     #[serde(default)]
-    pub(crate) allowed_origins: HashSet<String>,
+    pub(crate) allowed_origins: HashSet<Url>,
     /// If set all localhost origins are considered valid CORS origins
     /// Usefull for development, should be deactivated in production.
     #[serde(default = "false_default")]

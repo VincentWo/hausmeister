@@ -1,0 +1,1 @@
+alter table sessions add column webauthn_registration JSON;
