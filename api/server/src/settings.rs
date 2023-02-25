@@ -42,7 +42,7 @@ pub(crate) struct Config {
 /// are separated by `_`
 pub(crate) fn read_config() -> color_eyre::Result<Config> {
     let conf = config::Config::builder()
-        .add_source(File::with_name("config.toml").required(false))
+        .add_source(File::with_name("config.toml").required(true))
         .add_source(Environment::with_prefix("HM").separator("_"))
         .build()?;
 

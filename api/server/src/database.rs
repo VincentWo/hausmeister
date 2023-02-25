@@ -18,17 +18,18 @@ use color_eyre::{
     Report,
 };
 
-use redis::{aio::Connection, AsyncCommands};
 use serde::{Deserialize, Serialize};
 use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
+    types::Json,
     PgPool,
 };
 use tracing::{debug, debug_span, info, Instrument};
 use uuid::Uuid;
-use webauthn_rs::prelude::PasskeyRegistration;
+use webauthn_rs::prelude::Passkey;
 
 use crate::{
+    error_handling::ApiError,
     settings::DbConfig,
     types::{EMail, Password},
 };
@@ -38,11 +39,16 @@ use self::auth::Credentials;
 /// This directly mirrors the `users` table, expect for the password
 /// column, since we don't want to return a password on accident
 #[allow(clippy::missing_docs_in_private_items)]
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct User {
     pub(crate) id: Uuid,
     pub(crate) name: String,
     pub(crate) email: EMail,
+}
+
+impl session::data::Extractable for User {
+    const PATH: &'static str = "$.user";
+    type Rejection = ApiError;
 }
 
 /// This is an subset of [User], containing all the updatable properties
@@ -144,6 +150,19 @@ pub(crate) async fn create_admin_if_no_user_exist(
     }
 
     Ok(())
+}
+
+#[tracing::instrument(skip(pool))]
+pub(crate) async fn get_user_by_id(pool: &PgPool, user_id: &Uuid) -> Result<Option<User>, Report> {
+    let db_user = sqlx::query!("SELECT * FROM users WHERE id=$1", user_id)
+        .fetch_optional(pool)
+        .await?;
+
+    Ok(db_user.map(|db_user| User {
+        id: db_user.id,
+        name: db_user.name,
+        email: EMail(db_user.email),
+    }))
 }
 
 #[tracing::instrument(skip(pool))]
@@ -251,44 +270,10 @@ pub(crate) async fn reset_token_is_valid(
     .is_some())
 }
 
-#[tracing::instrument(skip(pool, redis_connection))]
-pub(crate) async fn remove_session(
-    pool: &PgPool,
-    redis_connection: &mut Connection,
-    id: &Uuid,
-) -> Result<(), Report> {
-    sqlx::query!("DELETE FROM sessions WHERE id = $1", id)
-        .execute(pool)
-        .await?;
-    redis_connection.del::<_, ()>(id.to_string()).await?;
-
-    Ok(())
-}
-
 #[tracing::instrument(skip(pool))]
-pub(crate) async fn get_user_from_session(
+pub(crate) async fn update_user(
     pool: &PgPool,
-    id: &Uuid,
-) -> Result<Option<User>, Report> {
-    Ok(sqlx::query!(
-        "SELECT users.id, name, email FROM sessions INNER JOIN users ON (user_id=users.id) WHERE sessions.id = $1",
-        id
-    ).fetch_optional(pool)
-    .await?
-    .map(|db_user| {
-            User {
-                id: db_user.id,
-                name: db_user.name,
-                email: EMail(db_user.email),
-            }
-        })
-    )
-}
-
-#[tracing::instrument(skip(pool))]
-pub(crate) async fn update_current_user(
-    pool: &PgPool,
-    session_id: &Uuid,
+    user_id: &Uuid,
     update: UserUpdate,
 ) -> Result<Option<User>, Report> {
     let user = sqlx::query!(
@@ -297,13 +282,11 @@ pub(crate) async fn update_current_user(
         SET
             name = coalesce($2, name),
             email = coalesce($3, email)
-        FROM
-            sessions
         WHERE
-            sessions.id = $1
+            id = $1
         RETURNING
             users.id, name, email",
-        session_id,
+        user_id,
         update.name,
         update.email,
     )
@@ -319,17 +302,46 @@ pub(crate) async fn update_current_user(
 }
 
 #[tracing::instrument]
-pub(crate) async fn set_webauthn_registration(
+pub(crate) async fn get_passkeys_for_user(
     pool: &PgPool,
-    session_id: &Uuid,
-    registration: PasskeyRegistration,
+    user_id: &Uuid,
+) -> Result<Vec<Passkey>, Report> {
+    let keys = sqlx::query!(
+        r#"
+            SELECT
+                key_data as "key_data: Json<Passkey>"
+            FROM
+                webauthn_passkeys
+            WHERE
+                user_id = $1
+        "#,
+        user_id,
+    )
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|rec| rec.key_data.0)
+    .collect();
+
+    Ok(keys)
+}
+#[tracing::instrument(skip(pool, passkey))]
+pub(crate) async fn add_passkey_for_user(
+    pool: &PgPool,
+    user_id: &Uuid,
+    passkey: Passkey,
 ) -> Result<(), Report> {
     sqlx::query!(
-        "UPDATE sessions
-         SET webauthn_registration = $1
-         WHERE id = $2",
-        sqlx::types::Json(registration) as _,
-        session_id,
-    ).execute(pool).await?;
+        "
+        INSERT INTO
+            webauthn_passkeys(id, user_id, key_data)
+        VALUES($1, $2, $3)",
+        Uuid::new_v4(),
+        user_id,
+        Json(passkey) as _,
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }

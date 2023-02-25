@@ -48,7 +48,10 @@
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use color_eyre::Report;
 use serde::Serialize;
+use session::data::Extractable;
 use tracing::error;
+
+use crate::{database::User, routes::webauthn};
 
 impl From<Report> for ApiError {
     fn from(value: Report) -> Self {
@@ -57,14 +60,12 @@ impl From<Report> for ApiError {
 }
 
 /// The type for all possible Errors that can be returned by a handler.
+#[derive(Debug)]
 pub(crate) enum ApiError {
     /// A request contains an email or user-id, that does not map to an user
     UserNotFound,
     /// A session id was specified that does'nt map to a session
     InvalidSession,
-    /// Session was specified using a invalid syntax, details
-    /// are in the inner Report.
-    MisformedAuth(Report),
     /// A specified token (i.e. for password reset) was not found
     TokenNotFound,
     /// The wrong password was submitted
@@ -73,6 +74,28 @@ pub(crate) enum ApiError {
     NotLoggedIn,
     /// Something unexpected happened (i.e. database connection failed)
     UnknownError(Report),
+    /// Somebody tried to finish a never started webauthn registration
+    WebauthnRegistrationNotInProgress,
+    /// We don't want to give the user more information, so we logged the
+    /// error, but return only unspecific things
+    UnknownWebauthnError,
+    NoPasskeysRegistered,
+}
+
+impl session::backend::Error for ApiError {
+    fn no_session() -> Self {
+        ApiError::NotLoggedIn
+    }
+
+    fn missing_data(path: &str) -> Self {
+        if path == User::PATH {
+            Self::NotLoggedIn
+        } else if path == webauthn::Registration::PATH {
+            Self::WebauthnRegistrationNotInProgress
+        } else {
+            Self::UnknownError(Report::msg(format!("Invalid session, missing: {path:?}")))
+        }
+    }
 }
 
 /// Every [ApiError] except the `UnknownError` returns the JSON
@@ -110,9 +133,17 @@ impl IntoResponse for ApiError {
                 StatusCode::FORBIDDEN,
                 "You have to be logged in to access this part of the api".to_owned(),
             ),
-            ApiError::MisformedAuth(error) => (
+            ApiError::WebauthnRegistrationNotInProgress => (
                 StatusCode::BAD_REQUEST,
-                format!("The Auth header did not follow 'Bearer [session_uuid]', getting error: {error}")
+                "You need to start a webauthn registration before finishing it.".to_owned(),
+            ),
+            ApiError::UnknownWebauthnError => (
+                StatusCode::BAD_REQUEST,
+                "Invalid challenge response".to_owned(),
+            ),
+            ApiError::NoPasskeysRegistered => (
+                StatusCode::BAD_REQUEST,
+                "You have to register a passkey before using one for authentication".to_owned(),
             ),
             ApiError::UnknownError(r) => {
                 let error = format!("{r:?}");

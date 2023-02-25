@@ -3,43 +3,43 @@
 //! These routes are used to do everything related directly to logging in
 //! or logging out
 
-use std::sync::Arc;
+use axum::{response::IntoResponse, Extension, Json};
 
-use axum::{Extension, Json};
+use serde_json::json;
 use sqlx::PgPool;
 
 use crate::{
     database::{
         auth::{login_user, Credentials, LoginError, Session},
-        remove_session,
+        User,
     },
     error_handling::ApiError,
-    middlewares::session::AuthenticatedSession,
+    RedisBackend,
 };
-use color_eyre::eyre::Context;
 
 /// Returns 200 if the user is logged in, 401 otherwise
 ///
-/// Note that [AuthenticatedSession] does all the actual work
+/// Note that [session::data::SessionData] does all the actual work
 #[tracing::instrument]
-pub(crate) async fn test_login(_: AuthenticatedSession) {}
+pub(crate) async fn test_login(
+    _login_checker: session::data::SessionData<RedisBackend, User>,
+) -> impl IntoResponse {
+    Json(json!({
+        "msg": "You are logged in."
+    }))
+}
 
 /// Logs the current user out
 ///
 /// Deletes the session in the redis cache and postgres server.
-#[tracing::instrument(skip(pool, redis_client))]
+#[tracing::instrument]
 pub(crate) async fn logout(
-    Extension(pool): Extension<PgPool>,
-    Extension(redis_client): Extension<Arc<redis::Client>>,
-    AuthenticatedSession(session_id): AuthenticatedSession,
-) -> Result<(), ApiError> {
-    let mut redis_connection = redis_client
-        .get_async_connection()
-        .await
-        .wrap_err("Redis error")?;
-    remove_session(&pool, &mut redis_connection, &session_id).await?;
-
-    Ok(())
+    user_data: session::data::SessionData<RedisBackend, User>,
+) -> Result<impl IntoResponse, ApiError> {
+    user_data.remove_session().await?;
+    Ok(Json(json!({
+        "msg": "You logged out.",
+    })))
 }
 
 /// Tries to log the user in
@@ -50,10 +50,18 @@ pub(crate) async fn logout(
 #[tracing::instrument(skip(pool))]
 pub(crate) async fn login(
     Extension(pool): Extension<PgPool>,
+    user_data: session::data::SessionData<RedisBackend, Option<User>>,
     Json(credentials): Json<Credentials>,
 ) -> Result<Json<Session>, ApiError> {
     match login_user(&pool, credentials).await? {
-        Ok(session) => Ok(Json(session)),
+        Ok(user) => {
+            let session_data = user_data.set(user).await?;
+            let session_id = session_data.id();
+            let user = session_data.take_data();
+            // let session_id = create_session(&mut redis_con, &user).await?;
+            // todo!()
+            Ok(Json(Session { session_id, user }))
+        }
         Err(e) => Err(match e {
             LoginError::UserNotFound => ApiError::UserNotFound,
             LoginError::InvalidCredentials => ApiError::WrongCredentials,

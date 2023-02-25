@@ -23,7 +23,7 @@ pub(crate) struct Password(pub(crate) String);
 /// logged emails for privacy reasons while still allowing for development
 /// to see them in clear, should also include some validation and canonicalization
 /// (everything lowercase), but this is a task for future me.
-#[derive(Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct EMail(pub(crate) String);
 
 impl fmt::Debug for EMail {

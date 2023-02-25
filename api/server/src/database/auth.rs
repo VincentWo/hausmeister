@@ -16,36 +16,6 @@ use crate::types::{EMail, Password};
 
 use super::User;
 
-/// Create a new session
-///
-/// Does not check any credentials, use [check_credentials_and_get_user]
-/// for that.
-///
-/// Note that this currently deletes an old session, which probably does
-/// not make sense in a multi-device scenario, but we will think about
-/// this once we are ready for multi-device.
-#[tracing::instrument(skip(pool))]
-async fn create_new_session(pool: &PgPool, user_id: &Uuid) -> Result<Uuid, Report> {
-    let session_id = Uuid::new_v4();
-    sqlx::query!(
-        "INSERT INTO
-            sessions (id, user_id)
-        VALUES
-            ($1, $2)
-        ON CONFLICT(user_id) DO
-            UPDATE SET
-                id = EXCLUDED.id,
-                user_id = EXCLUDED.user_id,
-                created_at = EXCLUDED.created_at",
-        session_id,
-        user_id,
-    )
-    .execute(pool)
-    .await?;
-
-    Ok(session_id)
-}
-
 /// Expected errors during login
 pub(crate) enum LoginError {
     /// User has not been found
@@ -117,24 +87,22 @@ async fn check_credentials_and_get_user(
 #[derive(Serialize, Debug)]
 pub(crate) struct Session {
     /// The session id/token
-    session_id: Uuid,
+    pub(crate) session_id: Uuid,
     /// User data at session creation
-    user: User,
+    pub(crate) user: User,
 }
 
 /// Check credentials & create session
 ///
-#[tracing::instrument]
+#[tracing::instrument(skip(pool))]
 pub(crate) async fn login_user(
     pool: &PgPool,
     credentials: Credentials,
-) -> Result<Result<Session, LoginError>, Report> {
+) -> Result<Result<User, LoginError>, Report> {
     let user = match check_credentials_and_get_user(pool, credentials).await? {
         Ok(user) => user,
         Err(err) => return Ok(Err(err)),
     };
 
-    let session_id = create_new_session(pool, &user.id).await?;
-
-    Ok(Ok(Session { user, session_id }))
+    Ok(Ok(user))
 }

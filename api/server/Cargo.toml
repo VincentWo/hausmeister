@@ -1,0 +1,29 @@
+[package]
+name = "hausmeister"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+argon2 = { version = "0.4.1", features = ["std"], default-features = false }
+async-trait = { version = "0.1.63", default-features = false }
+axum = { version = "0.6.8", features = ["macros", "multipart", "headers", "http1", "http2", "json", "tokio", "tower-log"], default-features = false }
+color-eyre = { version = "0.6.2", default-features = false }
+config = { version = "0.13.3", default-features = false, features = ["toml"] }
+dotenv = { version = "0.15.0", default-features = false }
+futures = { version = "0.3.25", default-features = false }
+mime = { version = "0.3.16", default-features = false }
+redis = { version = "0.22.3", features = ["tokio-comp", "r2d2", "ahash", "serde", "serde_json", "json"], default-features = false }
+serde = { version = "1.0.152", features = ["derive"], default-features = false }
+serde_json = { version = "1.0.93", default-features = false }
+session = { version = "0.1.0", path = "../session", default-features = false }
+sqlx = { version = "0.6.2", features = ["runtime-tokio-rustls", "postgres", "uuid", "time", "json", "macros"], default-features = false }
+tokio = { version = "1.24.1", features = ["full"], default-features = false }
+tower = { version = "0.4.13", default-features = false }
+tower-http = { version = "0.3.5", features = ["trace", "cors", "request-id", "uuid"], default-features = false }
+tracing = { version = "0.1.37", default-features = false }
+tracing-error = { version = "0.2.0", default-features = false }
+tracing-subscriber = { version = "0.3.16", features = ["env-filter", "json"], default-features = false }
+tracing-tree = { version = "0.2.2", default-features = false }
+uuid = { version = "1.2.2", features = ["v4", "serde"], default-features = false }
+webauthn-rs = { version = "0.4.8", features = ["danger-allow-state-serialisation"], default-features = false }

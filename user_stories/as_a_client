@@ -1,0 +1,7 @@
+As a client...
+[ ] ...I want to login to my account
+[ ] ...I want to be able to use a security key as login
+	[ ] ...I want to be able to delete security keys
+[ ] ...I need to be able to reset my password using my email
+[ ] ...I need to be able to change my password when it got compromised
+[ ] ...I want to be able to create a new account
