@@ -72,14 +72,16 @@ pub(crate) enum ApiError {
     WrongCredentials,
     /// A route required authentication, but none was provided
     NotLoggedIn,
-    /// Something unexpected happened (i.e. database connection failed)
-    UnknownError(Report),
+    /// A client tried to authenticate using a passkey, but no passkey
+    /// was registered.
+    NoPasskeysRegistered,
     /// Somebody tried to finish a never started webauthn registration
     WebauthnRegistrationNotInProgress,
     /// We don't want to give the user more information, so we logged the
     /// error, but return only unspecific things
     UnknownWebauthnError,
-    NoPasskeysRegistered,
+    /// Something unexpected happened (i.e. database connection failed)
+    UnknownError(Report),
 }
 
 impl session::backend::Error for ApiError {

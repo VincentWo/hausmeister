@@ -44,7 +44,12 @@
 )]
 #![doc = include_str!("../README.md")]
 
-use std::{any::type_name, net::SocketAddr, sync::Arc};
+use std::{
+    any::type_name,
+    future::Future,
+    net::{Ipv6Addr, SocketAddr, SocketAddrV6, TcpListener},
+    sync::Arc,
+};
 
 use axum::{
     http::{
@@ -57,12 +62,12 @@ use axum::{
 
 use color_eyre::{eyre::Context, Report};
 use error_handling::ApiError;
-use futures::Future;
+use futures::FutureExt;
 use redis::{AsyncCommands, JsonAsyncCommands};
 
 use serde::{de::DeserializeOwned, Serialize};
 
-use settings::{read_config, Config};
+use settings::Config;
 use tower::ServiceBuilder;
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
@@ -77,7 +82,9 @@ use webauthn_rs::prelude::Url;
 use crate::{
     database::{auth::Credentials, create_admin_if_no_user_exist},
     routes::{
+        healthcheck::health_check,
         login::{logout, test_login},
+        register::register,
         reset::{request_reset, reset_password, test_reset_token},
         user::{get_user, patch_user},
         webauthn::{finish_authentication, finish_register, start_authentication, start_register},
@@ -88,8 +95,8 @@ use crate::{
 mod database;
 mod error_handling;
 mod routes;
-mod settings;
-mod trace;
+pub mod settings;
+pub mod trace;
 mod types;
 mod webauthn;
 
@@ -99,22 +106,20 @@ use routes::login::login;
 ///
 /// Only public function at the moment - should be changed to accept the
 /// settings to move setting loading into the application
-pub async fn run() -> Result<(), Report> {
-    dotenv::dotenv()?;
-
-    color_eyre::install()?;
-    trace::setup()?;
-
-    let config = read_config()?;
-
-    run_server(config).await?;
-
-    Ok(())
+pub async fn create_app(
+    config: Config,
+) -> Result<(SocketAddr, impl Future<Output = Result<(), Report>> + Send), Report> {
+    run_server(config).await
 }
 
 /// Start the server with the given configuration
-async fn run_server(config: Config) -> Result<(), Report> {
-    let addr: SocketAddr = "[::1]:3779".parse()?;
+async fn run_server(
+    config: Config,
+) -> Result<(SocketAddr, impl Future<Output = Result<(), Report>> + Send), Report> {
+    let addr = SocketAddrV6::new("::1".parse()?, config.app.port, 0, 0);
+    let listener = TcpListener::bind(addr)?;
+    let addr = listener.local_addr()?;
+
     info!("Listening on http://{}", addr);
 
     let pool = database::connect(&config.database).await?;
@@ -132,9 +137,11 @@ async fn run_server(config: Config) -> Result<(), Report> {
     .await?;
 
     let app = Router::new()
+        .route("/health_check", get(health_check))
         .route("/test_login", get(test_login))
         .route("/login", post(login))
         .route("/logout", post(logout))
+        .route("/register", post(register))
         .route("/request-reset", post(request_reset))
         .route("/reset", post(reset_password))
         .route("/user", get(get_user))
@@ -191,9 +198,12 @@ async fn run_server(config: Config) -> Result<(), Report> {
         .propagate_x_request_id()
         .service(app);
 
-    Server::bind(&addr).serve(svc.into_make_service()).await?;
-
-    Ok(())
+    Ok((
+        addr,
+        Server::from_tcp(listener)?
+            .serve(svc.into_make_service())
+            .map(|r| r.map_err(|e| e.into())),
+    ))
 }
 
 #[derive(Clone, Debug)]

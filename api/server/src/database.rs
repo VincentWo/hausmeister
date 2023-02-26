@@ -51,7 +51,17 @@ impl session::data::Extractable for User {
     type Rejection = ApiError;
 }
 
-/// This is an subset of [User], containing all the updatable properties
+/// This is a subset of [User], containing all the needed properties
+/// for creation - missing the id
+#[allow(clippy::missing_docs_in_private_items)]
+#[derive(Debug, Deserialize)]
+pub(crate) struct UserCreation {
+    pub(crate) name: String,
+    pub(crate) email: EMail,
+    pub(crate) password: Password,
+}
+
+/// This is a subset of [User], containing all the updatable properties
 /// as [Options](::std::option), usefull for allowing partial updates.
 #[allow(clippy::missing_docs_in_private_items)]
 #[derive(Debug, Deserialize)]
@@ -75,9 +85,7 @@ pub(crate) struct UserWithPassword {
 /// name to "hausmeister"
 #[tracing::instrument(skip(config))]
 pub(crate) async fn connect(config: &DbConfig) -> color_eyre::Result<PgPool> {
-    let options = config
-        .url
-        .parse::<PgConnectOptions>()
+    let options = std::convert::TryInto::<PgConnectOptions>::try_into(config)
         .wrap_err("Failed parsing database URL")?
         .application_name("hausmeister");
 
@@ -152,6 +160,38 @@ pub(crate) async fn create_admin_if_no_user_exist(
     Ok(())
 }
 
+#[tracing::instrument(skip(pool))]
+pub(crate) async fn create_user(
+    pool: &PgPool,
+    UserCreation {
+        email,
+        name,
+        password,
+    }: UserCreation,
+) -> Result<User, Report> {
+    let id = Uuid::new_v4();
+
+    let argon2 = Argon2::default();
+    let salt = SaltString::generate(&mut OsRng);
+    let hash = argon2
+        .hash_password(password.0.as_bytes(), &salt)?
+        .to_string();
+
+    sqlx::query!(
+        "INSERT INTO
+            users (id, email, name, password)
+         VALUES
+            ($1, $2, $3, $4)",
+        id,
+        email.0,
+        name,
+        hash,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(User { id, email, name })
+}
 #[tracing::instrument(skip(pool))]
 pub(crate) async fn get_user_by_id(pool: &PgPool, user_id: &Uuid) -> Result<Option<User>, Report> {
     let db_user = sqlx::query!("SELECT * FROM users WHERE id=$1", user_id)
