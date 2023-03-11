@@ -1,0 +1,272 @@
+{
+  "db": "PostgreSQL",
+  "142a65e2c6fb6f634aaf47af72727b7e194b018a60bcca70dfc5b4165231862f": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Uuid"
+        ]
+      }
+    },
+    "query": "INSERT INTO\n            password_reset_requests (id, user_id)\n        VALUES\n            ($1, $2)\n        ON CONFLICT(user_id) DO\n            UPDATE SET\n                id = EXCLUDED.id,\n                user_id = EXCLUDED.user_id,\n                created_at = EXCLUDED.created_at"
+  },
+  "27884af02a4bf2ff1dc86689d72212b19940d7a59eec6b9ea6e3d3b97932dbe6": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Uuid",
+          "Json"
+        ]
+      }
+    },
+    "query": "\n        INSERT INTO\n            webauthn_passkeys(id, user_id, key_data)\n        VALUES($1, $2, $3)"
+  },
+  "2875ea2d040c6fb732bdcee89641607d8f25987393746327e8e93d730ca933f9": {
+    "describe": {
+      "columns": [
+        {
+          "name": "user_id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "DELETE FROM password_reset_requests WHERE id = $1 RETURNING user_id"
+  },
+  "4269965dadca9c7903d53bd4db7643a08d9906333edb0da0e7f2a76079cdf55d": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          "Text"
+        ]
+      }
+    },
+    "query": "\n    INSERT INTO users (id, email, password, name) VALUES ($1, $2, $3, 'Admin')\n        ON CONFLICT DO NOTHING"
+  },
+  "7d2c57135ca1a72b8ad6cd64888c6c69ed231a5a0f5b4d02fb3ac1707f388f12": {
+    "describe": {
+      "columns": [
+        {
+          "name": "count",
+          "ordinal": 0,
+          "type_info": "Int8"
+        }
+      ],
+      "nullable": [
+        null
+      ],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "select Count(*) from users"
+  },
+  "863aba88804575206f49c0b66d4cb049aaa545482838edec3d5a9038d78e0ce4": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "email",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "password",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "name",
+          "ordinal": 3,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "SELECT * FROM users WHERE id=$1"
+  },
+  "8ee11d5a147606cd6dbed927dcdf4eb91bbf13a1d0085346ac5b95c8d8b94c49": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "name",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "email",
+          "ordinal": 2,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          "Text"
+        ]
+      }
+    },
+    "query": "UPDATE\n            users\n        SET\n            name = coalesce($2, name),\n            email = coalesce($3, email)\n        WHERE\n            id = $1\n        RETURNING\n            users.id, name, email"
+  },
+  "af70f5d2df43c788a8560f5191fd2434ef059fc786fda17dd3ee616aaad87d88": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Uuid",
+          "Text",
+          "Text",
+          "Text"
+        ]
+      }
+    },
+    "query": "INSERT INTO\n            users (id, email, name, password)\n         VALUES\n            ($1, $2, $3, $4)"
+  },
+  "b177590af523a8a4e1b752c72af0383037c5221a302672486d6429056beefc5e": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Uuid"
+        ]
+      }
+    },
+    "query": "UPDATE users\n            SET password = $1\n            WHERE id = $2"
+  },
+  "b9c9effad3c0866f0670044e17936f79238c4d5597be12bb9f34a00d40c1d074": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "user_id",
+          "ordinal": 1,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 2,
+          "type_info": "Timestamp"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "SELECT * FROM password_reset_requests WHERE id = $1"
+  },
+  "eaa640b57177bdcb03b52c77820f0a2035d28e8cbaa51d1b85b0c9029a99624c": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "email",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "password",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "name",
+          "ordinal": 3,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "SELECT * FROM users WHERE email=$1"
+  },
+  "ebbc95844970f50521875ee1f7c35415dff14c1ba49ae7f3a86a494bea847d03": {
+    "describe": {
+      "columns": [
+        {
+          "name": "key_data: Json<Passkey>",
+          "ordinal": 0,
+          "type_info": "Json"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n            SELECT\n                key_data as \"key_data: Json<Passkey>\"\n            FROM\n                webauthn_passkeys\n            WHERE\n                user_id = $1\n        "
+  }
+}

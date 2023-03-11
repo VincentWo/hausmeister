@@ -1,9 +1,10 @@
 //! Loading settings from files and environment
-use std::{collections::HashSet, str::FromStr};
+use std::{collections::HashSet, net::IpAddr, str::FromStr};
 
+use color_eyre::eyre::Context;
 use config::{Environment, File};
 use serde::Deserialize;
-use sqlx::postgres::PgConnectOptions;
+use sqlx::{postgres::PgConnectOptions, ConnectOptions};
 use webauthn_rs::prelude::Url;
 
 /// Config for PostgreSQL Connection
@@ -49,6 +50,7 @@ impl TryInto<PgConnectOptions> for &DbConfig {
                     options = options.database(db_name);
                 }
 
+                options.log_statements(tracing::log::LevelFilter::Trace);
                 Ok(options)
             }
         }
@@ -72,9 +74,19 @@ pub struct AppConfig {
     #[serde(default = "false_default")]
     pub allow_localhost: bool,
 
+    /// The IP the server is listening on
+    pub listen_on: IpAddr,
+
     /// The port the server is going to listen to
     #[serde(default = "default_port")]
     pub port: u16,
+}
+
+/// Configuring redis connection
+#[derive(Debug, Deserialize)]
+pub struct RedisConfig {
+    /// The URL
+    pub url: Url,
 }
 
 /// Collection of all config areas
@@ -84,6 +96,8 @@ pub struct Config {
     pub database: DbConfig,
     /// General application config
     pub app: AppConfig,
+    /// Config for the redis connection
+    pub redis: RedisConfig,
 }
 
 /// Reads config from config.toml + environment
@@ -93,11 +107,16 @@ pub struct Config {
 /// are separated by `_`
 pub fn read_config() -> color_eyre::Result<Config> {
     let conf = config::Config::builder()
-        .add_source(File::with_name("config.toml").required(true))
-        .add_source(Environment::with_prefix("HM").separator("_"))
-        .build()?;
+        .add_source(File::with_name("config.toml").required(false))
+        .add_source(
+            Environment::with_prefix("HM")
+                .separator("__")
+                .prefix_separator("_"),
+        )
+        .build()
+        .wrap_err("Reading the config")?;
 
-    Ok(conf.try_deserialize()?)
+    conf.try_deserialize().wrap_err("Parsing the config")
 }
 
 /// Proxy for serde default

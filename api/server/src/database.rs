@@ -6,12 +6,7 @@
 
 pub(crate) mod auth;
 
-use std::time::Duration;
-
-use argon2::{
-    password_hash::{rand_core::OsRng, SaltString},
-    Argon2, PasswordHasher,
-};
+use std::{ops::Deref, time::Duration};
 
 use color_eyre::{
     eyre::{eyre, Context},
@@ -31,7 +26,7 @@ use webauthn_rs::prelude::Passkey;
 use crate::{
     error_handling::ApiError,
     settings::DbConfig,
-    types::{EMail, Password},
+    types::{EMail, NameOfUser, Password},
 };
 
 use self::auth::Credentials;
@@ -56,7 +51,7 @@ impl session::data::Extractable for User {
 #[allow(clippy::missing_docs_in_private_items)]
 #[derive(Debug, Deserialize)]
 pub(crate) struct UserCreation {
-    pub(crate) name: String,
+    pub(crate) name: NameOfUser,
     pub(crate) email: EMail,
     pub(crate) password: Password,
 }
@@ -70,20 +65,9 @@ pub(crate) struct UserUpdate {
     pub(crate) email: Option<String>,
 }
 
-/// The same as [User], just including a password where it is
-/// required
-#[allow(clippy::missing_docs_in_private_items)]
-#[derive(Debug, Serialize)]
-pub(crate) struct UserWithPassword {
-    pub(crate) id: Uuid,
-    pub(crate) name: String,
-    pub(crate) email: EMail,
-    pub(crate) password: Password,
-}
-
 /// Connects to the database given by `config`, setting the application
 /// name to "hausmeister"
-#[tracing::instrument(skip(config))]
+#[tracing::instrument(skip(config), err)]
 pub(crate) async fn connect(config: &DbConfig) -> color_eyre::Result<PgPool> {
     let options = std::convert::TryInto::<PgConnectOptions>::try_into(config)
         .wrap_err("Failed parsing database URL")?
@@ -98,7 +82,7 @@ pub(crate) async fn connect(config: &DbConfig) -> color_eyre::Result<PgPool> {
 }
 
 /// Returns the number of registered users
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(pool), err)]
 pub(crate) async fn count_user(pool: &PgPool) -> Result<i64, Report> {
     sqlx::query!("select Count(*) from users")
         .fetch_one(pool)
@@ -124,17 +108,12 @@ pub(crate) async fn count_user(pool: &PgPool) -> Result<i64, Report> {
 /// the same admin + password is chosen by all instances
 /// (and this method probably needs to be removed for
 /// security reasons anyway)
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(pool), err)]
 pub(crate) async fn create_admin_if_no_user_exist(
     pool: &PgPool,
     Credentials { password, email }: &Credentials,
 ) -> Result<(), Report> {
-    let argon2 = Argon2::default();
-    let salt = SaltString::generate(&mut OsRng);
-    let hash = argon2
-        .hash_password(password.0.as_bytes(), &salt)?
-        .to_string();
-
+    let hash = password.hash()?;
     if count_user(pool).await? == 0 {
         debug!("No user exist: Creating some.");
         let query_result = sqlx::query!(
@@ -142,8 +121,8 @@ pub(crate) async fn create_admin_if_no_user_exist(
     INSERT INTO users (id, email, password, name) VALUES ($1, $2, $3, 'Admin')
         ON CONFLICT DO NOTHING"#,
             Uuid::new_v4(),
-            email.0,
-            hash,
+            email.as_ref(),
+            hash.as_str(),
         )
         .execute(pool)
         .await?;
@@ -160,7 +139,7 @@ pub(crate) async fn create_admin_if_no_user_exist(
     Ok(())
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(pool), err)]
 pub(crate) async fn create_user(
     pool: &PgPool,
     UserCreation {
@@ -171,57 +150,64 @@ pub(crate) async fn create_user(
 ) -> Result<User, Report> {
     let id = Uuid::new_v4();
 
-    let argon2 = Argon2::default();
-    let salt = SaltString::generate(&mut OsRng);
-    let hash = argon2
-        .hash_password(password.0.as_bytes(), &salt)?
-        .to_string();
-
+    let hash = password.hash()?;
     sqlx::query!(
         "INSERT INTO
             users (id, email, name, password)
          VALUES
             ($1, $2, $3, $4)",
         id,
-        email.0,
-        name,
-        hash,
+        email.deref(),
+        name.deref(),
+        hash.as_str(),
     )
     .execute(pool)
     .await?;
 
-    Ok(User { id, email, name })
+    Ok(User {
+        id,
+        email,
+        name: name.parse()?,
+    })
 }
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(pool), err)]
 pub(crate) async fn get_user_by_id(pool: &PgPool, user_id: &Uuid) -> Result<Option<User>, Report> {
     let db_user = sqlx::query!("SELECT * FROM users WHERE id=$1", user_id)
         .fetch_optional(pool)
         .await?;
 
-    Ok(db_user.map(|db_user| User {
-        id: db_user.id,
-        name: db_user.name,
-        email: EMail(db_user.email),
-    }))
+    db_user
+        .map(|db_user| {
+            Ok(User {
+                id: db_user.id,
+                name: db_user.name,
+                email: db_user.email.parse()?,
+            })
+        })
+        .transpose()
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(pool), err)]
 pub(crate) async fn get_user_by_email(
     pool: &PgPool,
     email: &EMail,
 ) -> Result<Option<User>, Report> {
-    let db_user = sqlx::query!("SELECT * FROM users WHERE email=$1", email.0)
+    let db_user = sqlx::query!("SELECT * FROM users WHERE email=$1", email.deref())
         .fetch_optional(pool)
         .await?;
 
-    Ok(db_user.map(|db_user| User {
-        id: db_user.id,
-        name: db_user.name,
-        email: EMail(db_user.email),
-    }))
+    db_user
+        .map(|db_user| {
+            Ok(User {
+                id: db_user.id,
+                name: db_user.name,
+                email: db_user.email.parse()?,
+            })
+        })
+        .transpose()
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(pool), err)]
 pub(crate) async fn new_reset_request(pool: &PgPool, user_id: &Uuid) -> Result<Uuid, Report> {
     let reset_id = Uuid::new_v4();
     sqlx::query!(
@@ -256,7 +242,7 @@ pub(crate) enum ResetError {
 /// for errors that have a concrete reason and can be fixed by the caller.
 ///
 /// See [ResetError] for the possible failures.
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(pool), err)]
 pub(crate) async fn reset_password(
     pool: &PgPool,
     reset_token: &Uuid,
@@ -275,17 +261,12 @@ pub(crate) async fn reset_password(
         return Ok(Err(ResetError::TokenNotFound));
     };
 
-    let argon2 = Argon2::default();
-    let salt = SaltString::generate(&mut OsRng);
-    let hash = argon2
-        .hash_password(new_password.0.as_bytes(), &salt)?
-        .to_string();
-
+    let hash = new_password.hash()?;
     sqlx::query!(
         "UPDATE users
             SET password = $1
             WHERE id = $2",
-        hash,
+        hash.as_str(),
         reset_request.user_id,
     )
     .execute(&mut transaction)
@@ -296,7 +277,7 @@ pub(crate) async fn reset_password(
     Ok(Ok(()))
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(pool), err)]
 pub(crate) async fn reset_token_is_valid(
     pool: &PgPool,
     reset_token: &Uuid,
@@ -310,7 +291,7 @@ pub(crate) async fn reset_token_is_valid(
     .is_some())
 }
 
-#[tracing::instrument(skip(pool))]
+#[tracing::instrument(skip(pool), err)]
 pub(crate) async fn update_user(
     pool: &PgPool,
     user_id: &Uuid,
@@ -332,16 +313,18 @@ pub(crate) async fn update_user(
     )
     .fetch_optional(pool)
     .await?
-    .map(|db_user| User {
-        id: db_user.id,
-        name: db_user.name,
-        email: EMail(db_user.email),
+    .map(|db_user| {
+        Ok(User {
+            id: db_user.id,
+            name: db_user.name,
+            email: db_user.email.parse()?,
+        })
     });
 
-    Ok(user)
+    user.transpose()
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip(pool), err)]
 pub(crate) async fn get_passkeys_for_user(
     pool: &PgPool,
     user_id: &Uuid,
@@ -365,7 +348,7 @@ pub(crate) async fn get_passkeys_for_user(
 
     Ok(keys)
 }
-#[tracing::instrument(skip(pool, passkey))]
+#[tracing::instrument(skip(pool, passkey), err)]
 pub(crate) async fn add_passkey_for_user(
     pool: &PgPool,
     user_id: &Uuid,

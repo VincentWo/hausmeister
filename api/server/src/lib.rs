@@ -47,7 +47,7 @@
 use std::{
     any::type_name,
     future::Future,
-    net::{Ipv6Addr, SocketAddr, SocketAddrV6, TcpListener},
+    net::{SocketAddr, TcpListener},
     sync::Arc,
 };
 
@@ -89,7 +89,6 @@ use crate::{
         user::{get_user, patch_user},
         webauthn::{finish_authentication, finish_register, start_authentication, start_register},
     },
-    types::{EMail, Password},
 };
 
 mod database;
@@ -116,7 +115,7 @@ pub async fn create_app(
 async fn run_server(
     config: Config,
 ) -> Result<(SocketAddr, impl Future<Output = Result<(), Report>> + Send), Report> {
-    let addr = SocketAddrV6::new("::1".parse()?, config.app.port, 0, 0);
+    let addr = SocketAddr::new(config.app.listen_on, config.app.port);
     let listener = TcpListener::bind(addr)?;
     let addr = listener.local_addr()?;
 
@@ -125,13 +124,14 @@ async fn run_server(
     let pool = database::connect(&config.database).await?;
     let webauthn = webauthn::setup(&config.app)?;
 
-    let redis_client = redis::Client::open("redis://localhost")?;
+    info!(url = ?config.redis.url, "Connecting to redis");
+    let redis_client = redis::Client::open(config.redis.url.to_string())?;
 
     create_admin_if_no_user_exist(
         &pool,
         &Credentials {
-            email: EMail("admin@example.com".to_owned()),
-            password: Password("password".to_owned()),
+            email: "admin@example.com".parse()?,
+            password: "test_password".parse().expect("Hardcoded, so never fails"),
         },
     )
     .await?;

@@ -12,7 +12,7 @@ use tracing_tree::HierarchicalLayer;
 ///
 /// The plan is to include opentelemetry support later on and
 /// more config options
-pub(crate) fn setup() -> Result<(), Report> {
+pub fn setup() -> Result<(), Report> {
     Registry::default()
         .with(EnvFilter::from_default_env())
         .with(

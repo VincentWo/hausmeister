@@ -40,8 +40,7 @@ pub(crate) async fn start_register(
     Extension(webauthn): Extension<Arc<Webauthn>>,
 ) -> Result<impl IntoResponse, ApiError> {
     let user = user_data.take_data();
-    let res = match webauthn.start_passkey_registration(user.id, &user.email.0, &user.email.0, None)
-    {
+    let res = match webauthn.start_passkey_registration(user.id, &user.email, &user.email, None) {
         Ok((ccr, reg_state)) => {
             webauthn_data.set(Registration(reg_state)).await?;
             Json(ccr)

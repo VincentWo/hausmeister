@@ -11,13 +11,16 @@ axum = { version = "0.6.8", features = ["macros", "multipart", "headers", "http1
 color-eyre = { version = "0.6.2", default-features = false }
 config = { version = "0.13.3", default-features = false, features = ["toml"] }
 dotenv = { version = "0.15.0", default-features = false }
+fake = "2.5.0"
 futures = { version = "0.3.25", default-features = false }
 mime = { version = "0.3.16", default-features = false }
+openssl = { version = "0.10.45", features = ["vendored"] }
 redis = { version = "0.22.3", features = ["tokio-comp", "r2d2", "ahash", "serde", "serde_json", "json"], default-features = false }
+secrecy = { version = "0.8.0", default-features = false, features = ["serde", "alloc"] }
 serde = { version = "1.0.152", features = ["derive"], default-features = false }
 serde_json = { version = "1.0.93", default-features = false }
 session = { version = "0.1.0", path = "../session", default-features = false }
-sqlx = { version = "0.6.2", features = ["runtime-tokio-rustls", "postgres", "uuid", "time", "json", "macros", "migrate"], default-features = false }
+sqlx = { version = "0.6.2", features = ["runtime-tokio-rustls", "postgres", "uuid", "time", "json", "macros", "migrate", "offline"], default-features = false }
 tokio = { version = "1.24.1", features = ["full"], default-features = false }
 tower = { version = "0.4.13", default-features = false }
 tower-http = { version = "0.3.5", features = ["trace", "cors", "request-id", "uuid"], default-features = false }
@@ -26,7 +29,10 @@ tracing-error = { version = "0.2.0", default-features = false }
 tracing-subscriber = { version = "0.3.16", features = ["env-filter", "json"], default-features = false }
 tracing-tree = { version = "0.2.2", default-features = false }
 uuid = { version = "1.2.2", features = ["v4", "serde"], default-features = false }
+validator = { version = "0.16.0", default-features = false }
 webauthn-rs = { version = "0.4.8", features = ["danger-allow-state-serialisation"], default-features = false }
 
 [dev-dependencies]
+claims = "0.7.1"
+proptest = "1.1.0"
 reqwest = { version = "0.11.14", features = ["json"] }

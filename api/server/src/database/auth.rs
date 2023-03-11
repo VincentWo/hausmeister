@@ -6,7 +6,6 @@
 //! to hashing algorithms, security updates and helps
 //! hiding passwords from attackers
 
-use argon2::{password_hash, Argon2, PasswordHash, PasswordVerifier};
 use color_eyre::Report;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -28,7 +27,7 @@ pub(crate) enum LoginError {
 }
 
 /// Unhashed Login Credentials
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub(crate) struct Credentials {
     // Self-explanatory, doc would just be noise
     #[allow(clippy::missing_docs_in_private_items)]
@@ -48,34 +47,22 @@ async fn check_credentials_and_get_user(
     pool: &PgPool,
     credentials: Credentials,
 ) -> Result<Result<User, LoginError>, Report> {
-    let Some(saved_user) = sqlx::query!("SELECT * FROM users WHERE email=$1", credentials.email.0)
+    let Some(saved_user) = sqlx::query!("SELECT * FROM users WHERE email=$1", credentials.email.as_ref())
         .fetch_optional(pool)
         .await? else {
         // Expected error, so outer Ok
         return Ok(Err(LoginError::UserNotFound));
     };
 
-    let hash = PasswordHash::new(&saved_user.password)?;
-
-    // All this double result stuff can be confusing, but the basic idea is
-    // that we only return an outer error if something unexpected goes wrong
-    // So InvalidCredentials are wrapped in Ok (since DB etc. did not have a problem),
-    // but are still an Err
-    let user_or_error = Argon2::default()
-        .verify_password(credentials.password.0.as_bytes(), &hash)
-        .map(|_| {
-            Ok(User {
-                id: saved_user.id,
-                name: saved_user.name,
-                email: EMail(saved_user.email),
-            })
-        })
-        .or_else(|e| match e {
-            password_hash::Error::Password => Ok(Err(LoginError::InvalidCredentials)),
-            e => Err(e),
-        })?;
-
-    Ok(user_or_error)
+    if credentials.password.match_hash(&saved_user.password)? {
+        Ok(Ok(User {
+            id: saved_user.id,
+            email: saved_user.email.parse()?,
+            name: saved_user.name,
+        }))
+    } else {
+        Ok(Err(LoginError::InvalidCredentials))
+    }
 }
 
 /// A successfully created session

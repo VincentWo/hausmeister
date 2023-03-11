@@ -1,8 +1,9 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, net::Ipv6Addr};
 
 use hausmeister::{
     create_app,
-    settings::{AppConfig, Config, DbConfig},
+    settings::{AppConfig, Config, DbConfig, RedisConfig},
+    trace,
 };
 use reqwest::StatusCode;
 use serde_json::json;
@@ -11,6 +12,9 @@ use tokio::spawn;
 use uuid::Uuid;
 
 async fn spawn_app() -> (String, reqwest::Client, PgConnection) {
+    if std::env::var("TEST_LOG").is_ok() {
+        trace::setup().expect("Setting up trace");
+    }
     let db_name = Uuid::new_v4().to_string();
 
     let config = Config {
@@ -24,8 +28,12 @@ async fn spawn_app() -> (String, reqwest::Client, PgConnection) {
         },
         app: AppConfig {
             port: 0,
+            listen_on: Ipv6Addr::LOCALHOST.into(),
             allowed_origins: HashSet::new(),
             allow_localhost: true,
+        },
+        redis: RedisConfig {
+            url: "redis://localhost".parse().unwrap(),
         },
     };
 
@@ -79,7 +87,7 @@ async fn register_works() {
 
     let email = "test@example.com";
     let name = "Test User";
-    let password = "1234";
+    let password = "12345678910";
     let response = client
         .post(format!("{base_url}/register"))
         .json(&json!({
@@ -89,7 +97,9 @@ async fn register_works() {
         }))
         .send()
         .await
-        .expect("Failed to send request");
+        .expect("Failed to send request")
+        .error_for_status()
+        .expect("Register failed with error status");
 
     let user = sqlx::query!("SELECT * FROM USERS WHERE email = $1", email)
         .fetch_one(&mut db_client)
@@ -110,14 +120,14 @@ async fn register_returns_400_when_data_is_missing() {
         (
             json!({
                 "name": "Test User",
-                "password": "password"
+                "password": "test_password"
             }),
             "missing the email",
         ),
         (
             json!({
                 "email": "test@example.com",
-                "password": "password",
+                "password": "test_password",
             }),
             "missing the name",
         ),
@@ -143,5 +153,53 @@ async fn register_returns_400_when_data_is_missing() {
             StatusCode::UNPROCESSABLE_ENTITY,
             "The API did not fail with 422 Unprocessable Entity when the payload was {reason}"
         )
+    }
+}
+
+#[tokio::test]
+async fn register_returns_a_422_when_fields_are_present_but_invalid() {
+    let (url, client, _) = spawn_app().await;
+
+    // This only handles name + email, password validation is more complex
+    // so we have a different test for that
+    let test_cases = [
+        (
+            json! ({
+                "email": "",
+                "name": "Joshua",
+                "password": "test_password"
+            }),
+            "Missing the e-mail",
+        ),
+        (
+            json! ({
+                "email": "test@example.com",
+                "name": "",
+                "password": "test_password"
+            }),
+            "Missing the name",
+        ),
+        (
+            json! ({
+                "email": "not-an-email",
+                "name": "Hannah",
+                "password": "test_password"
+            }),
+            "Invalid e-mail",
+        ),
+    ];
+
+    for (body, description) in test_cases {
+        let response = client
+            .post(format!("{url}/register"))
+            .json(&body)
+            .send()
+            .await
+            .expect("Failed to reach the app");
+        assert_eq!(
+            response.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "The API did not return a 422 when the payload was {description}",
+        );
     }
 }

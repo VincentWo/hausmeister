@@ -14,5 +14,16 @@ services:
     restart: always
     ports:
       - 6379:6379
-      
-  
+
+  hausmeister:
+    environment:
+      RUST_BACKTRACE: 0
+      RUST_LOG: "debug,hausmeister=trace"
+      HM_APP__LISTEN: "::"
+      HM_REDIS__URL: "redis://redis/"
+      HM_DATABASE__URL: "psql://hausmeister:password@db/"
+    ports:
+      - 3779:3779
+    build: "."
+    init: true
+ 
